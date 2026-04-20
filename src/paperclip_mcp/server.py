@@ -56,11 +56,11 @@ _HTTP_TIMEOUT = 30  # seconds
 
 
 def _headers() -> dict[str, str]:
-    """Build per-request headers.  X-Paperclip-Run-Id is a unique trace ID."""
+    """Build per-request headers.  Omit X-Paperclip-Run-Id — a fake UUID causes
+    FK violations against heartbeat_runs when the API logs activity."""
     return {
         "Authorization": f"Bearer {API_KEY}",
         "Content-Type": "application/json",
-        "X-Paperclip-Run-Id": str(uuid.uuid4()),
     }
 
 
