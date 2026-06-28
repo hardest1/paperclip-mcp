@@ -658,6 +658,124 @@ async def update_routine(
     return await _patch(f"/routines/{routine_id}", body)
 
 
+# ── ROUTINE TRIGGERS ──────────────────────────────────────────────────────────
+
+_TRIGGER_KINDS = {"schedule", "webhook", "api"}
+
+
+@mcp.tool()
+async def add_routine_trigger(
+    routine_id: str,
+    kind: str,
+    cron_expression: str = "",
+    timezone: str = "",
+    signing_mode: str = "",
+    replay_window_sec: int = 0,
+) -> Any:
+    """Add a trigger to a routine.
+
+    Three trigger kinds are supported:
+    - schedule: fires on a cron schedule
+    - webhook: fires when an external webhook is received
+    - api: fires via the Paperclip API
+
+    Args:
+        routine_id: UUID of the routine to add a trigger to.
+        kind: Trigger kind — schedule, webhook, or api.
+        cron_expression: Cron expression (schedule triggers only).
+        timezone: IANA timezone for the cron schedule
+                  (e.g. "Europe/Berlin"). Schedule triggers only.
+        signing_mode: Signing mode for webhook triggers
+                      (e.g. "hmac_sha256").
+        replay_window_sec: Replay protection window in seconds
+                           (30–86400). Webhook triggers only.
+    """
+    if kind not in _TRIGGER_KINDS:
+        return _err(
+            f"Invalid trigger kind '{kind}'. "
+            f"Allowed: {', '.join(sorted(_TRIGGER_KINDS))}."
+        )
+    if replay_window_sec and not (30 <= replay_window_sec <= 86400):
+        return _err(
+            "replay_window_sec must be between 30 and 86400."
+        )
+    body: dict[str, Any] = {"kind": kind}
+    if cron_expression:
+        body["cronExpression"] = cron_expression
+    if timezone:
+        body["timezone"] = timezone
+    if signing_mode:
+        body["signingMode"] = signing_mode
+    if replay_window_sec:
+        body["replayWindowSec"] = replay_window_sec
+    return await _post(f"/routines/{routine_id}/triggers", body)
+
+
+@mcp.tool()
+async def update_routine_trigger(
+    trigger_id: str,
+    enabled: bool | None = None,
+    cron_expression: str = "",
+    timezone: str = "",
+    signing_mode: str = "",
+    replay_window_sec: int = 0,
+) -> Any:
+    """Update an existing routine trigger.
+
+    Args:
+        trigger_id: Trigger UUID.
+        enabled: Set to false to disable the trigger without deleting it.
+        cron_expression: New cron expression (schedule triggers).
+        timezone: New timezone (schedule triggers).
+        signing_mode: New signing mode (webhook triggers).
+        replay_window_sec: New replay window in seconds (30–86400).
+    """
+    if replay_window_sec and not (30 <= replay_window_sec <= 86400):
+        return _err("replay_window_sec must be between 30 and 86400.")
+    body: dict[str, Any] = {}
+    if enabled is not None:
+        body["enabled"] = enabled
+    if cron_expression:
+        body["cronExpression"] = cron_expression
+    if timezone:
+        body["timezone"] = timezone
+    if signing_mode:
+        body["signingMode"] = signing_mode
+    if replay_window_sec:
+        body["replayWindowSec"] = replay_window_sec
+    if not body:
+        return _err(
+            "No fields to update. Provide at least one of: "
+            "enabled, cron_expression, timezone, signing_mode, "
+            "replay_window_sec."
+        )
+    return await _patch(f"/routine-triggers/{trigger_id}", body)
+
+
+@mcp.tool()
+async def delete_routine_trigger(trigger_id: str) -> Any:
+    """Delete a routine trigger.
+
+    Args:
+        trigger_id: Trigger UUID to delete.
+    """
+    return await _delete(f"/routine-triggers/{trigger_id}")
+
+
+@mcp.tool()
+async def rotate_trigger_secret(trigger_id: str) -> Any:
+    """Rotate the signing secret for a webhook trigger.
+
+    Generates a new secret and invalidates the previous one.
+    The new secret is returned in the response — store it
+    immediately as it cannot be retrieved again.
+
+    Args:
+        trigger_id: UUID of the webhook trigger.
+    """
+    return await _post(f"/routine-triggers/{trigger_id}/rotate-secret")
+
+
 # ── GOALS ──────────────────────────────────────────────────────────────────────
 
 @mcp.tool()
