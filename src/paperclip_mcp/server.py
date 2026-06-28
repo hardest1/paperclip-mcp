@@ -1708,6 +1708,128 @@ async def rotate_secret(
     return await _post(f"/secrets/{secret_id}/rotate", body)
 
 
+# ── SECRET PROVIDER VAULTS ───────────────────────────────────────────────────
+
+
+@mcp.tool()
+async def list_secret_provider_configs() -> Any:
+    """List all secret provider vault configurations for the active company."""
+    return await _get(f"/companies/{COMPANY}/secret-provider-configs")
+
+
+@mcp.tool()
+async def get_secret_provider_config(config_id: str) -> Any:
+    """Get a single secret provider vault configuration.
+
+    Args:
+        config_id: Provider config UUID.
+    """
+    return await _get(f"/secret-provider-configs/{config_id}")
+
+
+@mcp.tool()
+async def create_secret_provider_config(
+    provider: str,
+    display_name: str,
+    config: str = "",
+    is_default: bool = False,
+) -> Any:
+    """Create a secret provider vault configuration.
+
+    Args:
+        provider: Backend type (local_encrypted, aws_secrets_manager,
+                  gcp_secret_manager, vault).
+        display_name: Human-readable name for this configuration.
+        config: Provider-specific configuration as a JSON string.
+        is_default: Whether this should be the default provider.
+    """
+    import json as _json
+
+    body: dict[str, Any] = {
+        "provider": provider,
+        "displayName": display_name,
+        "isDefault": is_default,
+    }
+    if config:
+        try:
+            body["config"] = _json.loads(config)
+        except _json.JSONDecodeError as exc:
+            return _err(f"Invalid JSON in config: {exc}")
+    return await _post(f"/companies/{COMPANY}/secret-provider-configs", body)
+
+
+@mcp.tool()
+async def update_secret_provider_config(
+    config_id: str,
+    display_name: str = "",
+    config: str = "",
+    is_default: bool | None = None,
+) -> Any:
+    """Update a secret provider vault configuration.
+
+    The config field is replaced wholesale, not merged.
+
+    Args:
+        config_id: Provider config UUID.
+        display_name: New display name.
+        config: New provider-specific configuration as a JSON string.
+        is_default: Whether this should be the default provider.
+    """
+    import json as _json
+
+    body: dict[str, Any] = {}
+    if display_name:
+        body["displayName"] = display_name
+    if config:
+        try:
+            body["config"] = _json.loads(config)
+        except _json.JSONDecodeError as exc:
+            return _err(f"Invalid JSON in config: {exc}")
+    if is_default is not None:
+        body["isDefault"] = is_default
+    return await _patch(f"/secret-provider-configs/{config_id}", body)
+
+
+@mcp.tool()
+async def disable_secret_provider_config(config_id: str) -> Any:
+    """Disable (soft-delete) a secret provider vault configuration.
+
+    Sets status to disabled and clears isDefault.
+
+    Args:
+        config_id: Provider config UUID.
+    """
+    return await _delete(f"/secret-provider-configs/{config_id}")
+
+
+@mcp.tool()
+async def set_default_secret_provider_config(config_id: str) -> Any:
+    """Set a secret provider vault as the company default.
+
+    Returns 422 if the target config is disabled or coming_soon.
+
+    Args:
+        config_id: Provider config UUID.
+    """
+    return await _post(f"/secret-provider-configs/{config_id}/default")
+
+
+@mcp.tool()
+async def check_secret_provider_health(config_id: str) -> Any:
+    """Run a health probe against a specific secret provider vault.
+
+    Args:
+        config_id: Provider config UUID.
+    """
+    return await _post(f"/secret-provider-configs/{config_id}/health")
+
+
+@mcp.tool()
+async def get_secret_providers_health() -> Any:
+    """Get general health diagnostics for all secret providers in the company."""
+    return await _get(f"/companies/{COMPANY}/secret-providers/health")
+
+
 # ── APPROVALS ──────────────────────────────────────────────────────────────────
 
 @mcp.tool()
