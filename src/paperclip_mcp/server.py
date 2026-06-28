@@ -21,7 +21,6 @@ from __future__ import annotations
 import logging
 import os
 import sys
-import uuid
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -371,6 +370,143 @@ async def invoke_agent_heartbeat(agent_id: str) -> Any:
         agent_id: UUID of the agent to trigger.
     """
     return await _post(f"/agents/{agent_id}/heartbeat/invoke")
+
+
+@mcp.tool()
+async def create_agent(
+    name: str,
+    adapter_type: str,
+    role: str = "",
+    title: str = "",
+    reports_to: str = "",
+    capabilities: str = "",
+    adapter_config: str = "",
+) -> Any:
+    """Create a new agent in the active company.
+
+    Args:
+        name: Agent display name.
+        adapter_type: LLM adapter (e.g. "claude", "openai", "custom").
+        role: Agent role description (e.g. "engineer", "researcher").
+        title: Job title shown in the org chart.
+        reports_to: UUID of the agent this one reports to.
+        capabilities: Comma-separated capability tags (e.g. "code,review").
+        adapter_config: JSON string with adapter-specific settings
+                        (e.g. '{"model":"claude-sonnet-4-20250514"}').
+    """
+    body: dict[str, Any] = {"name": name, "adapterType": adapter_type}
+    if role:
+        body["role"] = role
+    if title:
+        body["title"] = title
+    if reports_to:
+        body["reportsTo"] = reports_to
+    if capabilities:
+        body["capabilities"] = capabilities
+    if adapter_config:
+        import json as _json
+
+        try:
+            body["adapterConfig"] = _json.loads(adapter_config)
+        except _json.JSONDecodeError:
+            return _err(
+                "adapter_config must be valid JSON "
+                '(e.g. \'{"model":"claude-sonnet-4-20250514"}\').'
+            )
+    return await _post(f"/companies/{COMPANY}/agents", body)
+
+
+@mcp.tool()
+async def update_agent(
+    agent_id: str,
+    name: str = "",
+    role: str = "",
+    title: str = "",
+    adapter_config: str = "",
+    budget_monthly_cents: int = 0,
+) -> Any:
+    """Update an existing agent. Only fields you provide are changed.
+
+    Args:
+        agent_id: Agent UUID.
+        name: New display name.
+        role: New role description.
+        title: New job title.
+        adapter_config: JSON string with new adapter settings.
+        budget_monthly_cents: Monthly budget cap in cents (0 to skip).
+    """
+    body: dict[str, Any] = {}
+    if name:
+        body["name"] = name
+    if role:
+        body["role"] = role
+    if title:
+        body["title"] = title
+    if adapter_config:
+        import json as _json
+
+        try:
+            body["adapterConfig"] = _json.loads(adapter_config)
+        except _json.JSONDecodeError:
+            return _err(
+                "adapter_config must be valid JSON "
+                '(e.g. \'{"model":"claude-sonnet-4-20250514"}\').'
+            )
+    if budget_monthly_cents:
+        body["budgetMonthlyCents"] = budget_monthly_cents
+    if not body:
+        return _err(
+            "No fields to update. Provide at least one of: "
+            "name, role, title, adapter_config, budget_monthly_cents."
+        )
+    return await _patch(f"/agents/{agent_id}", body)
+
+
+@mcp.tool()
+async def pause_agent(agent_id: str) -> Any:
+    """Temporarily pause an agent, stopping its heartbeat cycles.
+
+    The agent keeps its configuration and can be resumed later.
+
+    Args:
+        agent_id: UUID of the agent to pause.
+    """
+    return await _post(f"/agents/{agent_id}/pause")
+
+
+@mcp.tool()
+async def resume_agent(agent_id: str) -> Any:
+    """Resume a paused agent, restarting its heartbeat cycles.
+
+    Args:
+        agent_id: UUID of the agent to resume.
+    """
+    return await _post(f"/agents/{agent_id}/resume")
+
+
+@mcp.tool()
+async def clear_agent_error(agent_id: str) -> Any:
+    """Clear an agent's error state, moving it back to idle.
+
+    Only works when the agent is currently in an error state.
+
+    Args:
+        agent_id: UUID of the agent in error state.
+    """
+    return await _post(f"/agents/{agent_id}/clear-error")
+
+
+@mcp.tool()
+async def terminate_agent(agent_id: str) -> Any:
+    """PERMANENTLY deactivate an agent. THIS ACTION CANNOT BE UNDONE.
+
+    The agent will stop all work immediately and cannot be resumed or
+    restarted. Use pause_agent instead if you want a reversible stop.
+
+    Args:
+        agent_id: UUID of the agent to terminate.
+    """
+    return await _post(f"/agents/{agent_id}/terminate")
 
 
 # ── GOALS ──────────────────────────────────────────────────────────────────────
