@@ -1816,6 +1816,59 @@ async def get_cost_summary() -> Any:
 
 
 @mcp.tool()
+async def get_costs_by_agent() -> Any:
+    """Get per-agent cost breakdown for the current billing period.
+
+    Returns a list of agents with their token usage and spend in cents.
+    """
+    return await _get(f"/companies/{COMPANY}/costs/by-agent")
+
+
+@mcp.tool()
+async def get_costs_by_project() -> Any:
+    """Get per-project cost breakdown for the current billing period.
+
+    Returns a list of projects with their token usage and spend in cents.
+    """
+    return await _get(f"/companies/{COMPANY}/costs/by-project")
+
+
+@mcp.tool()
+async def report_cost_event(
+    agent_id: str,
+    provider: str,
+    model: str,
+    input_tokens: int,
+    output_tokens: int,
+    cost_cents: int,
+) -> Any:
+    """Report a manual cost event for token usage tracking.
+
+    Typically auto-reported by adapters, but useful for manual or
+    external-model tracking.
+
+    Args:
+        agent_id: Agent UUID that incurred the cost.
+        provider: LLM provider name (e.g. "openai", "anthropic").
+        model: Model identifier (e.g. "gpt-4o", "claude-sonnet-4-20250514").
+        input_tokens: Number of input tokens consumed.
+        output_tokens: Number of output tokens consumed.
+        cost_cents: Total cost in cents.
+    """
+    return await _post(
+        f"/companies/{COMPANY}/cost-events",
+        {
+            "agentId": agent_id,
+            "provider": provider,
+            "model": model,
+            "inputTokens": input_tokens,
+            "outputTokens": output_tokens,
+            "costCents": cost_cents,
+        },
+    )
+
+
+@mcp.tool()
 async def get_dashboard() -> Any:
     """Get a high-level health summary for the active company.
 
