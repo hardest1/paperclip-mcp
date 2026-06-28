@@ -387,6 +387,82 @@ async def delete_issue(issue_id: str) -> Any:
     return await _delete(f"/issues/{issue_id}")
 
 
+# ── COMPANIES ─────────────────────────────────────────────────────────────────
+
+@mcp.tool()
+async def list_companies() -> Any:
+    """List all companies accessible to the current API key."""
+    return await _get("/companies")
+
+
+@mcp.tool()
+async def get_company(company_id: str) -> Any:
+    """Get details for a specific company.
+
+    Args:
+        company_id: Company UUID.
+    """
+    return await _get(f"/companies/{company_id}")
+
+
+@mcp.tool()
+async def create_company(name: str, description: str = "") -> Any:
+    """Create a new company.
+
+    Args:
+        name: Company name.
+        description: Company description.
+    """
+    body: dict[str, Any] = {"name": name}
+    if description:
+        body["description"] = description
+    return await _post("/companies", body)
+
+
+@mcp.tool()
+async def update_company(
+    company_id: str,
+    name: str = "",
+    description: str = "",
+    budget_monthly_cents: int = 0,
+    logo_asset_id: str = "",
+) -> Any:
+    """Update an existing company. Only fields you provide are changed.
+
+    Args:
+        company_id: Company UUID.
+        name: New company name.
+        description: New description.
+        budget_monthly_cents: Monthly budget cap in cents (0 to skip).
+        logo_asset_id: Asset UUID for the company logo.
+    """
+    body: dict[str, Any] = {}
+    if name:
+        body["name"] = name
+    if description:
+        body["description"] = description
+    if budget_monthly_cents:
+        body["budgetMonthlyCents"] = budget_monthly_cents
+    if logo_asset_id:
+        body["logoAssetId"] = logo_asset_id
+    if not body:
+        return _err(
+            "No fields to update. Provide at least one of: "
+            "name, description, budget_monthly_cents, logo_asset_id."
+        )
+    return await _patch(f"/companies/{company_id}", body)
+
+
+@mcp.tool()
+async def archive_company(company_id: str) -> Any:
+    """Archive a company. Archived companies can no longer run agents.
+
+    Args:
+        company_id: Company UUID to archive.
+    """
+    return await _post(f"/companies/{company_id}/archive")
+
+
 # ── AGENTS ─────────────────────────────────────────────────────────────────────
 
 @mcp.tool()
