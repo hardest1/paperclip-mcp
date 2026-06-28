@@ -352,6 +352,9 @@ async def comment_on_issue(
 ) -> Any:
     """Add a comment to an issue (supports Markdown).
 
+    Note: @-mentions (e.g. @AgentName) in comments trigger an immediate
+    heartbeat for the mentioned agent.
+
     Args:
         issue_id: Issue UUID or identifier.
         body: Comment text. Markdown is supported.
@@ -362,6 +365,16 @@ async def comment_on_issue(
     if reopen:
         payload["reopen"] = True
     return await _post(f"/issues/{issue_id}/comments", payload)
+
+
+@mcp.tool()
+async def list_issue_comments(issue_id: str) -> Any:
+    """List all comments on an issue.
+
+    Args:
+        issue_id: Issue UUID or identifier.
+    """
+    return await _get(f"/issues/{issue_id}/comments")
 
 
 @mcp.tool()
