@@ -218,18 +218,22 @@ async def create_issue(
     project_id: str = "",
     parent_issue_id: str = "",
     priority: str = "medium",
+    goal_id: str = "",
 ) -> Any:
     """Create a new issue (task) and optionally assign it to an agent.
 
     Use this to delegate work to agents, create subtasks, or track action items.
 
     Args:
-        title: Short, imperative task title (e.g. "Search cheese suppliers in Barcelona").
-        description: Full instructions or context for the agent (Markdown supported).
-        assignee_agent_id: UUID of the agent to assign. Leave empty to leave unassigned.
-        project_id: UUID of the project this issue belongs to. Leave empty for no project.
-        parent_issue_id: UUID of the parent issue when creating a subtask. Leave empty for top-level.
-        priority: Task priority — urgent, high, medium, or low. Default: medium.
+        title: Short, imperative task title
+               (e.g. "Search cheese suppliers in Barcelona").
+        description: Full instructions or context for the agent
+                     (Markdown supported).
+        assignee_agent_id: UUID of the agent to assign.
+        project_id: UUID of the project this issue belongs to.
+        parent_issue_id: UUID of the parent issue (for subtasks).
+        priority: urgent, high, medium, or low. Default: medium.
+        goal_id: UUID of a goal to link this issue to.
     """
     body: dict[str, Any] = {"title": title, "priority": priority}
     if description:
@@ -240,6 +244,8 @@ async def create_issue(
         body["projectId"] = project_id
     if parent_issue_id:
         body["parentIssueId"] = parent_issue_id
+    if goal_id:
+        body["goalId"] = goal_id
     return await _post(f"/companies/{COMPANY}/issues", body)
 
 
@@ -251,17 +257,25 @@ async def update_issue(
     status: str = "",
     assignee_agent_id: str = "",
     priority: str = "",
+    goal_id: str = "",
+    project_id: str = "",
+    parent_id: str = "",
+    billing_code: str = "",
 ) -> Any:
     """Update an existing issue. Only fields you provide are changed.
 
     Args:
         issue_id: Issue UUID or identifier (e.g. "CY-42").
-        title: New title. Leave empty to keep current value.
-        description: New description (Markdown). Leave empty to keep current.
-        status: New status — todo, in_progress, blocked, done, or cancelled.
-                Leave empty to keep current.
-        assignee_agent_id: New agent UUID. Leave empty to keep current assignee.
-        priority: New priority — urgent, high, medium, or low. Leave empty to keep current.
+        title: New title.
+        description: New description (Markdown).
+        status: New status — todo, in_progress, blocked, done,
+                or cancelled.
+        assignee_agent_id: New agent UUID.
+        priority: New priority — urgent, high, medium, or low.
+        goal_id: UUID of a goal to link this issue to.
+        project_id: UUID of the project to move this issue to.
+        parent_id: UUID of a parent issue (for subtask grouping).
+        billing_code: Billing code for cost tracking.
     """
     body: dict[str, Any] = {}
     if title:
@@ -269,17 +283,38 @@ async def update_issue(
     if description:
         body["description"] = description
     if status:
-        if status not in {"todo", "in_progress", "blocked", "done", "cancelled"}:
-            return _err(f"Invalid status '{status}'. Allowed: todo, in_progress, blocked, done, cancelled.")
+        valid = {"todo", "in_progress", "blocked", "done", "cancelled"}
+        if status not in valid:
+            return _err(
+                f"Invalid status '{status}'. "
+                f"Allowed: {', '.join(sorted(valid))}."
+            )
         body["status"] = status
     if assignee_agent_id:
         body["assigneeAgentId"] = assignee_agent_id
     if priority:
-        if priority not in {"urgent", "high", "medium", "low"}:
-            return _err(f"Invalid priority '{priority}'. Allowed: urgent, high, medium, low.")
+        valid_p = {"urgent", "high", "medium", "low"}
+        if priority not in valid_p:
+            return _err(
+                f"Invalid priority '{priority}'. "
+                f"Allowed: {', '.join(sorted(valid_p))}."
+            )
         body["priority"] = priority
+    if goal_id:
+        body["goalId"] = goal_id
+    if project_id:
+        body["projectId"] = project_id
+    if parent_id:
+        body["parentId"] = parent_id
+    if billing_code:
+        body["billingCode"] = billing_code
     if not body:
-        return _err("No fields to update. Provide at least one of: title, description, status, assignee_agent_id, priority.")
+        return _err(
+            "No fields to update. Provide at least one of: "
+            "title, description, status, assignee_agent_id, "
+            "priority, goal_id, project_id, parent_id, "
+            "billing_code."
+        )
     return await _patch(f"/issues/{issue_id}", body)
 
 
