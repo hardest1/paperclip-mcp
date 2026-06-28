@@ -1458,6 +1458,83 @@ async def update_goal(
     return await _patch(f"/goals/{goal_id}", body)
 
 
+# ── SECRETS ───────────────────────────────────────────────────────────────────
+
+@mcp.tool()
+async def list_secrets() -> Any:
+    """List all secrets for the active company (metadata only).
+
+    Returns secret names, IDs, and provider info. Secret values are
+    never exposed through this tool.
+    """
+    return await _get(f"/companies/{COMPANY}/secrets")
+
+
+@mcp.tool()
+async def create_secret(
+    name: str,
+    value: str = "",
+    provider: str = "",
+    managed_mode: str = "",
+    external_ref: str = "",
+    provider_version_ref: str = "",
+    provider_config_id: str = "",
+) -> Any:
+    """Create a new encrypted secret.
+
+    Two modes are supported:
+    - Basic: provide name + value (encrypted at rest)
+    - External reference: provide name + provider + managed_mode +
+      external_ref for secrets managed in an external vault
+
+    Args:
+        name: Secret name (e.g. "DATABASE_URL").
+        value: Secret value (basic mode). Encrypted at rest.
+        provider: Provider backend (e.g. "aws_secrets_manager").
+        managed_mode: Set to "external_reference" for vault-managed
+                      secrets.
+        external_ref: External secret reference (e.g. ARN).
+        provider_version_ref: Version reference in the external vault.
+        provider_config_id: UUID of a provider vault config to pin to.
+    """
+    body: dict[str, Any] = {"name": name}
+    if value:
+        body["value"] = value
+    if provider:
+        body["provider"] = provider
+    if managed_mode:
+        body["managedMode"] = managed_mode
+    if external_ref:
+        body["externalRef"] = external_ref
+    if provider_version_ref:
+        body["providerVersionRef"] = provider_version_ref
+    if provider_config_id:
+        body["providerConfigId"] = provider_config_id
+    return await _post(f"/companies/{COMPANY}/secrets", body)
+
+
+@mcp.tool()
+async def rotate_secret(
+    secret_id: str,
+    value: str,
+    provider_config_id: str = "",
+) -> Any:
+    """Rotate a secret to a new value.
+
+    Agents configured with version: "latest" will receive the new
+    value on their next heartbeat.
+
+    Args:
+        secret_id: Secret UUID.
+        value: New secret value.
+        provider_config_id: UUID of a provider vault config (optional).
+    """
+    body: dict[str, Any] = {"value": value}
+    if provider_config_id:
+        body["providerConfigId"] = provider_config_id
+    return await _post(f"/secrets/{secret_id}/rotate", body)
+
+
 # ── APPROVALS ──────────────────────────────────────────────────────────────────
 
 @mcp.tool()
