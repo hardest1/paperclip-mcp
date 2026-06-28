@@ -1181,26 +1181,63 @@ async def delete_project_workspace(
 
 # ── GOALS ──────────────────────────────────────────────────────────────────────
 
+_GOAL_LEVELS = {"company", "team", "agent"}
+_GOAL_STATUSES = {"planned", "active", "achieved", "cancelled"}
+
+
 @mcp.tool()
 async def list_goals() -> Any:
-    """List all strategic goals and projects for the active company."""
+    """List all strategic goals for the active company."""
     return await _get(f"/companies/{COMPANY}/goals")
 
 
 @mcp.tool()
-async def create_goal(title: str, description: str = "") -> Any:
-    """Create a new strategic goal for the active company.
-
-    Goals provide high-level direction to agents. They appear in agent context
-    so agents can align their work accordingly.
+async def get_goal(goal_id: str) -> Any:
+    """Get full details of a single goal.
 
     Args:
-        title: Goal title (e.g. "Reach 300 packs/month in sales by June 2026").
-        description: Extended context, success criteria, and constraints (Markdown supported).
+        goal_id: Goal UUID.
     """
+    return await _get(f"/goals/{goal_id}")
+
+
+@mcp.tool()
+async def create_goal(
+    title: str,
+    description: str = "",
+    level: str = "",
+    status: str = "",
+) -> Any:
+    """Create a new strategic goal for the active company.
+
+    Goals form a hierarchy: company → team → agent-level.
+
+    Args:
+        title: Goal title
+               (e.g. "Reach 300 packs/month in sales by June 2026").
+        description: Extended context, success criteria, and
+                     constraints (Markdown supported).
+        level: Goal level — company, team, or agent.
+        status: Goal status — planned, active, achieved,
+                or cancelled.
+    """
+    if level and level not in _GOAL_LEVELS:
+        return _err(
+            f"Invalid level '{level}'. "
+            f"Allowed: {', '.join(sorted(_GOAL_LEVELS))}."
+        )
+    if status and status not in _GOAL_STATUSES:
+        return _err(
+            f"Invalid status '{status}'. "
+            f"Allowed: {', '.join(sorted(_GOAL_STATUSES))}."
+        )
     body: dict[str, Any] = {"title": title}
     if description:
         body["description"] = description
+    if level:
+        body["level"] = level
+    if status:
+        body["status"] = status
     return await _post(f"/companies/{COMPANY}/goals", body)
 
 
@@ -1209,21 +1246,34 @@ async def update_goal(
     goal_id: str,
     title: str = "",
     description: str = "",
+    status: str = "",
 ) -> Any:
-    """Update an existing goal's title or description.
+    """Update an existing goal.
 
     Args:
         goal_id: Goal UUID.
-        title: New title. Leave empty to keep current.
-        description: New description. Leave empty to keep current.
+        title: New title.
+        description: New description.
+        status: New status — planned, active, achieved,
+                or cancelled.
     """
+    if status and status not in _GOAL_STATUSES:
+        return _err(
+            f"Invalid status '{status}'. "
+            f"Allowed: {', '.join(sorted(_GOAL_STATUSES))}."
+        )
     body: dict[str, Any] = {}
     if title:
         body["title"] = title
     if description:
         body["description"] = description
+    if status:
+        body["status"] = status
     if not body:
-        return _err("No fields to update. Provide at least one of: title, description.")
+        return _err(
+            "No fields to update. Provide at least one of: "
+            "title, description, status."
+        )
     return await _patch(f"/goals/{goal_id}", body)
 
 
