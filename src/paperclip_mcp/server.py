@@ -11,8 +11,9 @@ MCP spec:      https://modelcontextprotocol.io
 Configuration (environment variables):
     PAPERCLIP_API_KEY      Required. Agent API key — generate in Paperclip UI:
                            Settings → API Keys → New Key.
-    PAPERCLIP_COMPANY_ID   Required. Company UUID shown in the Paperclip UI URL
-                           when viewing your company: /companies/{uuid}.
+    PAPERCLIP_COMPANY_ID   Optional. Default company UUID. When set, used as
+                           fallback for all company-scoped tools. When omitted,
+                           use set_active_company or pass company_id explicitly.
     PAPERCLIP_BASE_URL     Optional. Default: http://localhost:3100/api
 """
 
@@ -38,7 +39,18 @@ except ImportError:
 
 BASE_URL: str = os.environ.get("PAPERCLIP_BASE_URL", "http://localhost:3100/api").rstrip("/")
 API_KEY: str  = os.environ.get("PAPERCLIP_API_KEY", "")
-COMPANY: str  = os.environ.get("PAPERCLIP_COMPANY_ID", "")
+_active_company: str = os.environ.get("PAPERCLIP_COMPANY_ID", "")
+
+
+def _resolve_company(company_id: str = "") -> str:
+    """Return the effective company UUID: explicit param > active > env fallback."""
+    resolved = company_id.strip() or _active_company
+    if not resolved:
+        raise ValueError(
+            "No company selected. Use set_active_company first, "
+            "pass company_id explicitly, or set PAPERCLIP_COMPANY_ID."
+        )
+    return resolved
 
 # ── Logging ────────────────────────────────────────────────────────────────────
 
@@ -168,24 +180,25 @@ async def _upload_file(
 
 def _validate_config() -> None:
     """Fail fast with actionable error messages if required env vars are missing."""
-    missing = [k for k, v in {
-        "PAPERCLIP_API_KEY": API_KEY,
-        "PAPERCLIP_COMPANY_ID": COMPANY,
-    }.items() if not v]
-    if missing:
-        log.error("Missing required environment variables: %s", ", ".join(missing))
+    if not API_KEY:
+        log.error("Missing required environment variable: PAPERCLIP_API_KEY")
         log.error(
             "Copy .env.example to .env, fill in the values, then:\n"
             "  source .env && python -m paperclip_mcp\n"
             "Or set them in your shell before starting the server."
         )
         sys.exit(1)
+    if not _active_company:
+        log.info(
+            "PAPERCLIP_COMPANY_ID not set — multi-company mode. "
+            "Use set_active_company or pass company_id to tools."
+        )
 
 
 @asynccontextmanager
 async def _lifespan(_server: FastMCP):  # type: ignore[type-arg]
     _validate_config()
-    log.info("paperclip-mcp started — base: %s | company: %s", BASE_URL, COMPANY)
+    log.info("paperclip-mcp started — base: %s | company: %s", BASE_URL, _active_company or "(multi-company mode)")
     yield
     log.info("paperclip-mcp stopped.")
 
@@ -198,11 +211,55 @@ mcp = FastMCP(
         "Manage a Paperclip AI agent orchestration platform. "
         "Use these tools to create and track issues (tasks), inspect agents, "
         "set goals, handle approvals, and monitor costs. "
-        "All operations target a single Paperclip company configured via "
-        "PAPERCLIP_COMPANY_ID."
+        "Supports multiple companies: call list_companies to discover available "
+        "companies, then set_active_company to select one. Most tools also accept "
+        "an optional company_id parameter for one-off cross-company queries."
     ),
     lifespan=_lifespan,
 )
+
+
+# ── ACTIVE COMPANY ────────────────────────────────────────────────────────────
+
+@mcp.tool()
+async def get_active_company() -> Any:
+    """Get the currently active company UUID.
+
+    Returns the company UUID that will be used for all company-scoped
+    operations unless overridden by an explicit company_id parameter.
+    """
+    if not _active_company:
+        return _err(
+            "No active company set. Use set_active_company or pass "
+            "company_id to individual tools."
+        )
+    return {"activeCompanyId": _active_company}
+
+
+@mcp.tool()
+async def set_active_company(company_id: str) -> Any:
+    """Set the active company for all subsequent operations.
+
+    Call list_companies first to discover available companies.
+    Once set, all company-scoped tools will target this company
+    unless overridden by an explicit company_id parameter.
+
+    Args:
+        company_id: Company UUID to make active.
+    """
+    global _active_company
+    if not company_id.strip():
+        return _err("company_id is required.")
+    result = await _get(f"/companies/{company_id.strip()}")
+    if isinstance(result, dict) and result.get("isError"):
+        return result
+    _active_company = company_id.strip()
+    name = result.get("name", "") if isinstance(result, dict) else ""
+    return {
+        "ok": True,
+        "activeCompanyId": _active_company,
+        "companyName": name,
+    }
 
 
 # ── ISSUES ─────────────────────────────────────────────────────────────────────
@@ -214,8 +271,9 @@ async def list_issues(
     project_id: str = "",
     label: str = "",
     limit: int = 50,
+    company_id: str = "",
 ) -> Any:
-    """List issues (tasks) in the active company.
+    """List issues (tasks) in a company.
 
     Args:
         status: Comma-separated issue statuses to include.
@@ -225,7 +283,9 @@ async def list_issues(
         project_id: UUID of the project to filter by. Leave empty for all projects.
         label: Label name to filter by. Leave empty to skip label filtering.
         limit: Maximum number of results to return (1–200). Default: 50.
+        company_id: Company UUID. Uses the active company if empty.
     """
+    cid = _resolve_company(company_id)
     params: dict[str, Any] = {"status": status, "limit": max(1, min(limit, 200))}
     if assignee_agent_id:
         params["assigneeAgentId"] = assignee_agent_id
@@ -233,7 +293,7 @@ async def list_issues(
         params["projectId"] = project_id
     if label:
         params["label"] = label
-    return await _get(f"/companies/{COMPANY}/issues", params)
+    return await _get(f"/companies/{cid}/issues", params)
 
 
 @mcp.tool()
@@ -255,6 +315,7 @@ async def create_issue(
     parent_issue_id: str = "",
     priority: str = "medium",
     goal_id: str = "",
+    company_id: str = "",
 ) -> Any:
     """Create a new issue (task) and optionally assign it to an agent.
 
@@ -270,7 +331,9 @@ async def create_issue(
         parent_issue_id: UUID of the parent issue (for subtasks).
         priority: urgent, high, medium, or low. Default: medium.
         goal_id: UUID of a goal to link this issue to.
+        company_id: Company UUID. Uses the active company if empty.
     """
+    cid = _resolve_company(company_id)
     body: dict[str, Any] = {"title": title, "priority": priority}
     if description:
         body["description"] = description
@@ -282,7 +345,7 @@ async def create_issue(
         body["parentIssueId"] = parent_issue_id
     if goal_id:
         body["goalId"] = goal_id
-    return await _post(f"/companies/{COMPANY}/issues", body)
+    return await _post(f"/companies/{cid}/issues", body)
 
 
 @mcp.tool()
@@ -656,6 +719,7 @@ async def upload_issue_attachment(
     filename: str,
     content_base64: str,
     content_type: str = "application/octet-stream",
+    company_id: str = "",
 ) -> Any:
     """Upload a file attachment to an issue.
 
@@ -667,13 +731,15 @@ async def upload_issue_attachment(
         filename: Name for the uploaded file (e.g. "report.pdf").
         content_base64: File content encoded as base64.
         content_type: MIME type (default "application/octet-stream").
+        company_id: Company UUID. Uses the active company if empty.
     """
+    cid = _resolve_company(company_id)
     try:
         data = base64.b64decode(content_base64)
     except Exception:
         return _err("Invalid base64 in content_base64 parameter.")
     return await _upload_file(
-        f"/companies/{COMPANY}/issues/{issue_id}/attachments",
+        f"/companies/{cid}/issues/{issue_id}/attachments",
         filename,
         data,
         content_type,
@@ -759,9 +825,14 @@ async def archive_company(company_id: str) -> Any:
 # ── AGENTS ─────────────────────────────────────────────────────────────────────
 
 @mcp.tool()
-async def list_agents() -> Any:
-    """List all agents in the active company with their name, role, status, and config."""
-    return await _get(f"/companies/{COMPANY}/agents")
+async def list_agents(company_id: str = "") -> Any:
+    """List all agents in a company with their name, role, status, and config.
+
+    Args:
+        company_id: Company UUID. Uses the active company if empty.
+    """
+    cid = _resolve_company(company_id)
+    return await _get(f"/companies/{cid}/agents")
 
 
 @mcp.tool()
@@ -798,8 +869,9 @@ async def create_agent(
     reports_to: str = "",
     capabilities: str = "",
     adapter_config: str = "",
+    company_id: str = "",
 ) -> Any:
-    """Create a new agent in the active company.
+    """Create a new agent in a company.
 
     Args:
         name: Agent display name.
@@ -810,7 +882,9 @@ async def create_agent(
         capabilities: Comma-separated capability tags (e.g. "code,review").
         adapter_config: JSON string with adapter-specific settings
                         (e.g. '{"model":"claude-sonnet-4-20250514"}').
+        company_id: Company UUID. Uses the active company if empty.
     """
+    cid = _resolve_company(company_id)
     body: dict[str, Any] = {"name": name, "adapterType": adapter_type}
     if role:
         body["role"] = role
@@ -830,7 +904,7 @@ async def create_agent(
                 "adapter_config must be valid JSON "
                 '(e.g. \'{"model":"claude-sonnet-4-20250514"}\').'
             )
-    return await _post(f"/companies/{COMPANY}/agents", body)
+    return await _post(f"/companies/{cid}/agents", body)
 
 
 @mcp.tool()
@@ -966,24 +1040,30 @@ async def rollback_agent_config(
 
 
 @mcp.tool()
-async def get_org_chart() -> Any:
-    """Get the full organizational chart for the active company.
+async def get_org_chart(company_id: str = "") -> Any:
+    """Get the full organizational chart for a company.
 
     Returns the agent hierarchy tree showing reporting relationships.
+
+    Args:
+        company_id: Company UUID. Uses the active company if empty.
     """
-    return await _get(f"/companies/{COMPANY}/org")
+    cid = _resolve_company(company_id)
+    return await _get(f"/companies/{cid}/org")
 
 
 @mcp.tool()
-async def list_adapter_models(adapter_type: str) -> Any:
+async def list_adapter_models(adapter_type: str, company_id: str = "") -> Any:
     """List available models for an adapter type.
 
     Args:
         adapter_type: Adapter type (e.g. "claude", "openai",
                       "codex_local", "opencode_local").
+        company_id: Company UUID. Uses the active company if empty.
     """
+    cid = _resolve_company(company_id)
     return await _get(
-        f"/companies/{COMPANY}/adapters/{adapter_type}/models",
+        f"/companies/{cid}/adapters/{adapter_type}/models",
     )
 
 
@@ -995,9 +1075,14 @@ _ROUTINE_STATUSES = {"active", "paused", "archived"}
 
 
 @mcp.tool()
-async def list_routines() -> Any:
-    """List all routines for the active company."""
-    return await _get(f"/companies/{COMPANY}/routines")
+async def list_routines(company_id: str = "") -> Any:
+    """List all routines for a company.
+
+    Args:
+        company_id: Company UUID. Uses the active company if empty.
+    """
+    cid = _resolve_company(company_id)
+    return await _get(f"/companies/{cid}/routines")
 
 
 @mcp.tool()
@@ -1022,6 +1107,7 @@ async def create_routine(
     status: str = "",
     concurrency_policy: str = "",
     catch_up_policy: str = "",
+    company_id: str = "",
 ) -> Any:
     """Create a new routine (recurring task).
 
@@ -1038,6 +1124,7 @@ async def create_routine(
                             skip_if_active, or always_enqueue.
         catch_up_policy: skip_missed (default) or
                          enqueue_missed_with_cap.
+        company_id: Company UUID. Uses the active company if empty.
     """
     if concurrency_policy and concurrency_policy not in _CONCURRENCY_POLICIES:
         return _err(
@@ -1073,7 +1160,8 @@ async def create_routine(
         body["concurrencyPolicy"] = concurrency_policy
     if catch_up_policy:
         body["catchUpPolicy"] = catch_up_policy
-    return await _post(f"/companies/{COMPANY}/routines", body)
+    cid = _resolve_company(company_id)
+    return await _post(f"/companies/{cid}/routines", body)
 
 
 @mcp.tool()
@@ -1340,9 +1428,14 @@ async def restore_routine_revision(
 # ── PROJECTS ──────────────────────────────────────────────────────────────────
 
 @mcp.tool()
-async def list_projects() -> Any:
-    """List all projects in the active company."""
-    return await _get(f"/companies/{COMPANY}/projects")
+async def list_projects(company_id: str = "") -> Any:
+    """List all projects in a company.
+
+    Args:
+        company_id: Company UUID. Uses the active company if empty.
+    """
+    cid = _resolve_company(company_id)
+    return await _get(f"/companies/{cid}/projects")
 
 
 @mcp.tool()
@@ -1366,6 +1459,7 @@ async def create_project(
     workspace_repo_url: str = "",
     workspace_repo_ref: str = "",
     workspace_is_primary: bool = False,
+    company_id: str = "",
 ) -> Any:
     """Create a new project, optionally seeding an initial workspace.
 
@@ -1380,6 +1474,7 @@ async def create_project(
         workspace_repo_url: Git repository URL for the workspace.
         workspace_repo_ref: Git ref (branch/tag) for the workspace.
         workspace_is_primary: Mark the initial workspace as primary.
+        company_id: Company UUID. Uses the active company if empty.
     """
     body: dict[str, Any] = {"name": name}
     if description:
@@ -1401,7 +1496,8 @@ async def create_project(
         if workspace_is_primary:
             ws["isPrimary"] = True
         body["workspace"] = ws
-    return await _post(f"/companies/{COMPANY}/projects", body)
+    cid = _resolve_company(company_id)
+    return await _post(f"/companies/{cid}/projects", body)
 
 
 @mcp.tool()
@@ -1540,9 +1636,14 @@ _GOAL_STATUSES = {"planned", "active", "achieved", "cancelled"}
 
 
 @mcp.tool()
-async def list_goals() -> Any:
-    """List all strategic goals for the active company."""
-    return await _get(f"/companies/{COMPANY}/goals")
+async def list_goals(company_id: str = "") -> Any:
+    """List all strategic goals for a company.
+
+    Args:
+        company_id: Company UUID. Uses the active company if empty.
+    """
+    cid = _resolve_company(company_id)
+    return await _get(f"/companies/{cid}/goals")
 
 
 @mcp.tool()
@@ -1561,8 +1662,9 @@ async def create_goal(
     description: str = "",
     level: str = "",
     status: str = "",
+    company_id: str = "",
 ) -> Any:
-    """Create a new strategic goal for the active company.
+    """Create a new strategic goal for a company.
 
     Goals form a hierarchy: company → team → agent-level.
 
@@ -1574,6 +1676,7 @@ async def create_goal(
         level: Goal level — company, team, or agent.
         status: Goal status — planned, active, achieved,
                 or cancelled.
+        company_id: Company UUID. Uses the active company if empty.
     """
     if level and level not in _GOAL_LEVELS:
         return _err(
@@ -1592,7 +1695,8 @@ async def create_goal(
         body["level"] = level
     if status:
         body["status"] = status
-    return await _post(f"/companies/{COMPANY}/goals", body)
+    cid = _resolve_company(company_id)
+    return await _post(f"/companies/{cid}/goals", body)
 
 
 @mcp.tool()
@@ -1634,13 +1738,17 @@ async def update_goal(
 # ── SECRETS ───────────────────────────────────────────────────────────────────
 
 @mcp.tool()
-async def list_secrets() -> Any:
-    """List all secrets for the active company (metadata only).
+async def list_secrets(company_id: str = "") -> Any:
+    """List all secrets for a company (metadata only).
 
     Returns secret names, IDs, and provider info. Secret values are
     never exposed through this tool.
+
+    Args:
+        company_id: Company UUID. Uses the active company if empty.
     """
-    return await _get(f"/companies/{COMPANY}/secrets")
+    cid = _resolve_company(company_id)
+    return await _get(f"/companies/{cid}/secrets")
 
 
 @mcp.tool()
@@ -1652,6 +1760,7 @@ async def create_secret(
     external_ref: str = "",
     provider_version_ref: str = "",
     provider_config_id: str = "",
+    company_id: str = "",
 ) -> Any:
     """Create a new encrypted secret.
 
@@ -1669,6 +1778,7 @@ async def create_secret(
         external_ref: External secret reference (e.g. ARN).
         provider_version_ref: Version reference in the external vault.
         provider_config_id: UUID of a provider vault config to pin to.
+        company_id: Company UUID. Uses the active company if empty.
     """
     body: dict[str, Any] = {"name": name}
     if value:
@@ -1683,7 +1793,8 @@ async def create_secret(
         body["providerVersionRef"] = provider_version_ref
     if provider_config_id:
         body["providerConfigId"] = provider_config_id
-    return await _post(f"/companies/{COMPANY}/secrets", body)
+    cid = _resolve_company(company_id)
+    return await _post(f"/companies/{cid}/secrets", body)
 
 
 @mcp.tool()
@@ -1712,9 +1823,14 @@ async def rotate_secret(
 
 
 @mcp.tool()
-async def list_secret_provider_configs() -> Any:
-    """List all secret provider vault configurations for the active company."""
-    return await _get(f"/companies/{COMPANY}/secret-provider-configs")
+async def list_secret_provider_configs(company_id: str = "") -> Any:
+    """List all secret provider vault configurations for a company.
+
+    Args:
+        company_id: Company UUID. Uses the active company if empty.
+    """
+    cid = _resolve_company(company_id)
+    return await _get(f"/companies/{cid}/secret-provider-configs")
 
 
 @mcp.tool()
@@ -1733,6 +1849,7 @@ async def create_secret_provider_config(
     display_name: str,
     config: str = "",
     is_default: bool = False,
+    company_id: str = "",
 ) -> Any:
     """Create a secret provider vault configuration.
 
@@ -1742,6 +1859,7 @@ async def create_secret_provider_config(
         display_name: Human-readable name for this configuration.
         config: Provider-specific configuration as a JSON string.
         is_default: Whether this should be the default provider.
+        company_id: Company UUID. Uses the active company if empty.
     """
     import json as _json
 
@@ -1755,7 +1873,8 @@ async def create_secret_provider_config(
             body["config"] = _json.loads(config)
         except _json.JSONDecodeError as exc:
             return _err(f"Invalid JSON in config: {exc}")
-    return await _post(f"/companies/{COMPANY}/secret-provider-configs", body)
+    cid = _resolve_company(company_id)
+    return await _post(f"/companies/{cid}/secret-provider-configs", body)
 
 
 @mcp.tool()
@@ -1825,26 +1944,33 @@ async def check_secret_provider_health(config_id: str) -> Any:
 
 
 @mcp.tool()
-async def get_secret_providers_health() -> Any:
-    """Get general health diagnostics for all secret providers in the company."""
-    return await _get(f"/companies/{COMPANY}/secret-providers/health")
+async def get_secret_providers_health(company_id: str = "") -> Any:
+    """Get general health diagnostics for all secret providers in a company.
+
+    Args:
+        company_id: Company UUID. Uses the active company if empty.
+    """
+    cid = _resolve_company(company_id)
+    return await _get(f"/companies/{cid}/secret-providers/health")
 
 
 # ── APPROVALS ──────────────────────────────────────────────────────────────────
 
 @mcp.tool()
-async def list_approvals(status: str = "pending") -> Any:
-    """List approval requests in the active company.
+async def list_approvals(status: str = "pending", company_id: str = "") -> Any:
+    """List approval requests in a company.
 
     Args:
         status: Filter by status. Allowed values:
                 pending, approved, rejected, revision_requested.
                 Default: "pending"
+        company_id: Company UUID. Uses the active company if empty.
     """
     allowed = {"pending", "approved", "rejected", "revision_requested"}
     if status not in allowed:
         return _err(f"Invalid status '{status}'. Allowed: {', '.join(sorted(allowed))}.")
-    return await _get(f"/companies/{COMPANY}/approvals", {"status": status})
+    cid = _resolve_company(company_id)
+    return await _get(f"/companies/{cid}/approvals", {"status": status})
 
 
 @mcp.tool()
@@ -1910,6 +2036,7 @@ async def create_approval_request(
     approval_type: str,
     requested_by_agent_id: str,
     payload: str = "",
+    company_id: str = "",
 ) -> Any:
     """Create a new approval request.
 
@@ -1919,6 +2046,7 @@ async def create_approval_request(
         requested_by_agent_id: UUID of the agent requesting approval.
         payload: JSON string with type-specific data
                  (e.g. '{"amount":5000}').
+        company_id: Company UUID. Uses the active company if empty.
     """
     body: dict[str, Any] = {
         "type": approval_type,
@@ -1931,7 +2059,8 @@ async def create_approval_request(
             body["payload"] = _json.loads(payload)
         except _json.JSONDecodeError:
             return _err("payload must be valid JSON.")
-    return await _post(f"/companies/{COMPANY}/approvals", body)
+    cid = _resolve_company(company_id)
+    return await _post(f"/companies/{cid}/approvals", body)
 
 
 @mcp.tool()
@@ -1941,6 +2070,7 @@ async def create_hire_request(
     budget_monthly_cents: int = 0,
     reports_to: str = "",
     capabilities: str = "",
+    company_id: str = "",
 ) -> Any:
     """Create an agent hire request (draft agent + hire approval).
 
@@ -1953,6 +2083,7 @@ async def create_hire_request(
         budget_monthly_cents: Monthly budget cap in cents.
         reports_to: UUID of the agent this one reports to.
         capabilities: Comma-separated capability tags.
+        company_id: Company UUID. Uses the active company if empty.
     """
     body: dict[str, Any] = {"name": name, "role": role}
     if budget_monthly_cents:
@@ -1961,7 +2092,8 @@ async def create_hire_request(
         body["reportsTo"] = reports_to
     if capabilities:
         body["capabilities"] = capabilities
-    return await _post(f"/companies/{COMPANY}/agent-hires", body)
+    cid = _resolve_company(company_id)
+    return await _post(f"/companies/{cid}/agent-hires", body)
 
 
 @mcp.tool()
@@ -2023,31 +2155,43 @@ async def comment_on_approval(approval_id: str, body: str) -> Any:
 # ── COSTS & MONITORING ─────────────────────────────────────────────────────────
 
 @mcp.tool()
-async def get_cost_summary() -> Any:
-    """Get aggregate token usage and spend for the active company this billing period.
+async def get_cost_summary(company_id: str = "") -> Any:
+    """Get aggregate token usage and spend for a company this billing period.
 
     Returns total spend, remaining budget, and a per-agent cost breakdown.
     Use this to monitor AI spend and detect runaway agents.
+
+    Args:
+        company_id: Company UUID. Uses the active company if empty.
     """
-    return await _get(f"/companies/{COMPANY}/costs/summary")
+    cid = _resolve_company(company_id)
+    return await _get(f"/companies/{cid}/costs/summary")
 
 
 @mcp.tool()
-async def get_costs_by_agent() -> Any:
+async def get_costs_by_agent(company_id: str = "") -> Any:
     """Get per-agent cost breakdown for the current billing period.
 
     Returns a list of agents with their token usage and spend in cents.
+
+    Args:
+        company_id: Company UUID. Uses the active company if empty.
     """
-    return await _get(f"/companies/{COMPANY}/costs/by-agent")
+    cid = _resolve_company(company_id)
+    return await _get(f"/companies/{cid}/costs/by-agent")
 
 
 @mcp.tool()
-async def get_costs_by_project() -> Any:
+async def get_costs_by_project(company_id: str = "") -> Any:
     """Get per-project cost breakdown for the current billing period.
 
     Returns a list of projects with their token usage and spend in cents.
+
+    Args:
+        company_id: Company UUID. Uses the active company if empty.
     """
-    return await _get(f"/companies/{COMPANY}/costs/by-project")
+    cid = _resolve_company(company_id)
+    return await _get(f"/companies/{cid}/costs/by-project")
 
 
 @mcp.tool()
@@ -2058,6 +2202,7 @@ async def report_cost_event(
     input_tokens: int,
     output_tokens: int,
     cost_cents: int,
+    company_id: str = "",
 ) -> Any:
     """Report a manual cost event for token usage tracking.
 
@@ -2071,9 +2216,11 @@ async def report_cost_event(
         input_tokens: Number of input tokens consumed.
         output_tokens: Number of output tokens consumed.
         cost_cents: Total cost in cents.
+        company_id: Company UUID. Uses the active company if empty.
     """
+    cid = _resolve_company(company_id)
     return await _post(
-        f"/companies/{COMPANY}/cost-events",
+        f"/companies/{cid}/cost-events",
         {
             "agentId": agent_id,
             "provider": provider,
@@ -2086,13 +2233,17 @@ async def report_cost_event(
 
 
 @mcp.tool()
-async def get_dashboard() -> Any:
-    """Get a high-level health summary for the active company.
+async def get_dashboard(company_id: str = "") -> Any:
+    """Get a high-level health summary for a company.
 
     Returns: agent count, open/in-progress/blocked issue counts, stale tasks,
     recent activity digest, and current-period cost totals.
+
+    Args:
+        company_id: Company UUID. Uses the active company if empty.
     """
-    return await _get(f"/companies/{COMPANY}/dashboard")
+    cid = _resolve_company(company_id)
+    return await _get(f"/companies/{cid}/dashboard")
 
 
 _ENTITY_TYPES = {"issue", "agent", "approval"}
@@ -2104,20 +2255,23 @@ async def list_activity(
     entity_type: str = "",
     entity_id: str = "",
     limit: int = 20,
+    company_id: str = "",
 ) -> Any:
-    """Retrieve the audit trail of recent actions in the active company.
+    """Retrieve the audit trail of recent actions in a company.
 
     Args:
         agent_id: Filter to a specific agent UUID. Leave empty for all agents.
         entity_type: Filter by entity type: "issue", "agent", or "approval".
         entity_id: Filter by specific entity UUID.
         limit: Maximum number of entries to return (1–100). Default: 20.
+        company_id: Company UUID. Uses the active company if empty.
     """
     if entity_type and entity_type not in _ENTITY_TYPES:
         return _err(
             f"Invalid entity_type '{entity_type}'. "
             f"Allowed: {', '.join(sorted(_ENTITY_TYPES))}"
         )
+    cid = _resolve_company(company_id)
     params: dict[str, Any] = {"limit": max(1, min(limit, 100))}
     if agent_id:
         params["agentId"] = agent_id
@@ -2125,7 +2279,7 @@ async def list_activity(
         params["entityType"] = entity_type
     if entity_id:
         params["entityId"] = entity_id
-    return await _get(f"/companies/{COMPANY}/activity", params)
+    return await _get(f"/companies/{cid}/activity", params)
 
 
 # ── ENTRY POINT ────────────────────────────────────────────────────────────────

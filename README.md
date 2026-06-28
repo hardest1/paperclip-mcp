@@ -6,7 +6,7 @@ Exposes Paperclip's REST API as [Model Context Protocol](https://modelcontextpro
 
 ---
 
-## Features (88 tools)
+## Features (90 tools)
 
 | Category | Tools |
 |---|---|
@@ -14,6 +14,7 @@ Exposes Paperclip's REST API as [Model Context Protocol](https://modelcontextpro
 | **Issue Interactions** | `list_issue_interactions` · `create_issue_interaction` · `accept_issue_interaction` · `reject_issue_interaction` · `respond_to_issue_interaction` |
 | **Issue Documents** | `list_issue_documents` · `get_issue_document` · `upsert_issue_document` · `list_issue_document_revisions` · `delete_issue_document` |
 | **Issue Attachments** | `list_issue_attachments` · `upload_issue_attachment` · `download_attachment` · `delete_attachment` |
+| **Active Company** | `get_active_company` · `set_active_company` |
 | **Companies** | `list_companies` · `get_company` · `create_company` · `update_company` · `archive_company` |
 | **Agents** | `list_agents` · `get_agent` · `create_agent` · `update_agent` · `pause_agent` · `resume_agent` · `clear_agent_error` · `terminate_agent` · `invoke_agent_heartbeat` |
 | **Agent Config** | `create_agent_api_key` · `list_agent_config_revisions` · `rollback_agent_config` · `get_org_chart` · `list_adapter_models` |
@@ -73,7 +74,7 @@ cp .env.example .env
 ```dotenv
 PAPERCLIP_BASE_URL=http://localhost:3100/api   # default, change if needed
 PAPERCLIP_API_KEY=your_api_key_here
-PAPERCLIP_COMPANY_ID=your_company_uuid_here
+# PAPERCLIP_COMPANY_ID=your_company_uuid_here  # optional — see below
 ```
 
 > **Security**: Never commit `.env` to version control. It is listed in `.gitignore`.
@@ -81,6 +82,8 @@ PAPERCLIP_COMPANY_ID=your_company_uuid_here
 **Where to find these values:**
 - `PAPERCLIP_API_KEY` — Paperclip UI → Settings → API Keys → New Key
 - `PAPERCLIP_COMPANY_ID` — visible in the URL when viewing your company: `/companies/{uuid}`
+
+**Multi-company mode**: If your API key can access multiple companies (e.g. a board key), omit `PAPERCLIP_COMPANY_ID`. Then use `set_active_company` to switch between companies during a conversation, or pass `company_id` to individual tools.
 
 ---
 
@@ -120,8 +123,7 @@ claude mcp add paperclip --transport http http://localhost:9011/mcp
       "command": "paperclip-mcp",
       "args": ["--transport", "stdio"],
       "env": {
-        "PAPERCLIP_API_KEY": "your_api_key",
-        "PAPERCLIP_COMPANY_ID": "your_company_uuid"
+        "PAPERCLIP_API_KEY": "your_api_key"
       }
     }
   }
