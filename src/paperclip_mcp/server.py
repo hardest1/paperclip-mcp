@@ -509,6 +509,155 @@ async def terminate_agent(agent_id: str) -> Any:
     return await _post(f"/agents/{agent_id}/terminate")
 
 
+# ── ROUTINES ──────────────────────────────────────────────────────────────────
+
+_CONCURRENCY_POLICIES = {"coalesce_if_active", "skip_if_active", "always_enqueue"}
+_CATCH_UP_POLICIES = {"skip_missed", "enqueue_missed_with_cap"}
+_ROUTINE_STATUSES = {"active", "paused", "archived"}
+
+
+@mcp.tool()
+async def list_routines() -> Any:
+    """List all routines for the active company."""
+    return await _get(f"/companies/{COMPANY}/routines")
+
+
+@mcp.tool()
+async def get_routine(routine_id: str) -> Any:
+    """Get full details of a routine including its triggers.
+
+    Args:
+        routine_id: Routine UUID.
+    """
+    return await _get(f"/routines/{routine_id}")
+
+
+@mcp.tool()
+async def create_routine(
+    title: str,
+    assignee_agent_id: str,
+    project_id: str,
+    description: str = "",
+    goal_id: str = "",
+    parent_issue_id: str = "",
+    priority: str = "",
+    status: str = "",
+    concurrency_policy: str = "",
+    catch_up_policy: str = "",
+) -> Any:
+    """Create a new routine (recurring task).
+
+    Args:
+        title: Short routine title.
+        assignee_agent_id: UUID of the agent that executes the routine.
+        project_id: UUID of the project this routine belongs to.
+        description: Extended instructions (Markdown).
+        goal_id: UUID of the goal to link this routine to.
+        parent_issue_id: UUID of a parent issue for subtask grouping.
+        priority: urgent, high, medium, or low.
+        status: active, paused, or archived. Default: active.
+        concurrency_policy: coalesce_if_active (default),
+                            skip_if_active, or always_enqueue.
+        catch_up_policy: skip_missed (default) or
+                         enqueue_missed_with_cap.
+    """
+    if concurrency_policy and concurrency_policy not in _CONCURRENCY_POLICIES:
+        return _err(
+            f"Invalid concurrency_policy '{concurrency_policy}'. "
+            f"Allowed: {', '.join(sorted(_CONCURRENCY_POLICIES))}."
+        )
+    if catch_up_policy and catch_up_policy not in _CATCH_UP_POLICIES:
+        return _err(
+            f"Invalid catch_up_policy '{catch_up_policy}'. "
+            f"Allowed: {', '.join(sorted(_CATCH_UP_POLICIES))}."
+        )
+    if status and status not in _ROUTINE_STATUSES:
+        return _err(
+            f"Invalid status '{status}'. "
+            f"Allowed: {', '.join(sorted(_ROUTINE_STATUSES))}."
+        )
+    body: dict[str, Any] = {
+        "title": title,
+        "assigneeAgentId": assignee_agent_id,
+        "projectId": project_id,
+    }
+    if description:
+        body["description"] = description
+    if goal_id:
+        body["goalId"] = goal_id
+    if parent_issue_id:
+        body["parentIssueId"] = parent_issue_id
+    if priority:
+        body["priority"] = priority
+    if status:
+        body["status"] = status
+    if concurrency_policy:
+        body["concurrencyPolicy"] = concurrency_policy
+    if catch_up_policy:
+        body["catchUpPolicy"] = catch_up_policy
+    return await _post(f"/companies/{COMPANY}/routines", body)
+
+
+@mcp.tool()
+async def update_routine(
+    routine_id: str,
+    title: str = "",
+    description: str = "",
+    status: str = "",
+    concurrency_policy: str = "",
+    catch_up_policy: str = "",
+    base_revision_id: str = "",
+) -> Any:
+    """Update an existing routine. Only fields you provide are changed.
+
+    Args:
+        routine_id: Routine UUID.
+        title: New title.
+        description: New description (Markdown).
+        status: New status — active, paused, or archived.
+        concurrency_policy: coalesce_if_active, skip_if_active,
+                            or always_enqueue.
+        catch_up_policy: skip_missed or enqueue_missed_with_cap.
+        base_revision_id: Revision UUID for optimistic concurrency.
+                          Returns 409 if the routine was modified since
+                          this revision.
+    """
+    if status and status not in _ROUTINE_STATUSES:
+        return _err(
+            f"Invalid status '{status}'. "
+            f"Allowed: {', '.join(sorted(_ROUTINE_STATUSES))}."
+        )
+    if concurrency_policy and concurrency_policy not in _CONCURRENCY_POLICIES:
+        return _err(
+            f"Invalid concurrency_policy '{concurrency_policy}'. "
+            f"Allowed: {', '.join(sorted(_CONCURRENCY_POLICIES))}."
+        )
+    if catch_up_policy and catch_up_policy not in _CATCH_UP_POLICIES:
+        return _err(
+            f"Invalid catch_up_policy '{catch_up_policy}'. "
+            f"Allowed: {', '.join(sorted(_CATCH_UP_POLICIES))}."
+        )
+    body: dict[str, Any] = {}
+    if title:
+        body["title"] = title
+    if description:
+        body["description"] = description
+    if status:
+        body["status"] = status
+    if concurrency_policy:
+        body["concurrencyPolicy"] = concurrency_policy
+    if catch_up_policy:
+        body["catchUpPolicy"] = catch_up_policy
+    if base_revision_id:
+        body["baseRevisionId"] = base_revision_id
+    if not body:
+        return _err(
+            "No fields to update. Provide at least one of: "
+            "title, description, status, concurrency_policy, catch_up_policy."
+        )
+    return await _patch(f"/routines/{routine_id}", body)
+
+
 # ── GOALS ──────────────────────────────────────────────────────────────────────
 
 @mcp.tool()
