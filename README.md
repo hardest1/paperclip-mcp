@@ -2,19 +2,31 @@
 
 MCP server for the [Paperclip](https://github.com/paperclipai/paperclip) AI agent orchestration platform.
 
-Exposes Paperclip's REST API as [Model Context Protocol](https://modelcontextprotocol.io) tools, so any MCP-compatible AI assistant (Claude, etc.) can manage issues, agents, goals, approvals, and costs through natural language.
+Exposes Paperclip's REST API as [Model Context Protocol](https://modelcontextprotocol.io) tools, so any MCP-compatible AI assistant (Claude, etc.) can manage issues, agents, routines, projects, goals, approvals, secrets, and costs through natural language.
 
 ---
 
-## Features
+## Features (88 tools)
 
 | Category | Tools |
 |---|---|
-| **Issues** | `list_issues` · `get_issue` · `create_issue` · `update_issue` · `checkout_issue` · `release_issue` · `comment_on_issue` · `delete_issue` |
-| **Agents** | `list_agents` · `get_agent` · `invoke_agent_heartbeat` |
-| **Goals** | `list_goals` · `create_goal` · `update_goal` |
-| **Approvals** | `list_approvals` · `approve` · `reject` · `request_approval_revision` |
-| **Monitoring** | `get_cost_summary` · `get_dashboard` · `list_activity` |
+| **Issues** | `list_issues` · `get_issue` · `create_issue` · `update_issue` · `checkout_issue` · `release_issue` · `comment_on_issue` · `list_issue_comments` · `delete_issue` |
+| **Issue Interactions** | `list_issue_interactions` · `create_issue_interaction` · `accept_issue_interaction` · `reject_issue_interaction` · `respond_to_issue_interaction` |
+| **Issue Documents** | `list_issue_documents` · `get_issue_document` · `upsert_issue_document` · `list_issue_document_revisions` · `delete_issue_document` |
+| **Issue Attachments** | `list_issue_attachments` · `upload_issue_attachment` · `download_attachment` · `delete_attachment` |
+| **Companies** | `list_companies` · `get_company` · `create_company` · `update_company` · `archive_company` |
+| **Agents** | `list_agents` · `get_agent` · `create_agent` · `update_agent` · `pause_agent` · `resume_agent` · `clear_agent_error` · `terminate_agent` · `invoke_agent_heartbeat` |
+| **Agent Config** | `create_agent_api_key` · `list_agent_config_revisions` · `rollback_agent_config` · `get_org_chart` · `list_adapter_models` |
+| **Routines** | `list_routines` · `get_routine` · `create_routine` · `update_routine` |
+| **Routine Triggers** | `add_routine_trigger` · `update_routine_trigger` · `delete_routine_trigger` · `rotate_trigger_secret` |
+| **Routine Runs** | `run_routine` · `list_routine_runs` · `list_routine_revisions` · `restore_routine_revision` |
+| **Projects** | `list_projects` · `get_project` · `create_project` · `update_project` |
+| **Project Workspaces** | `list_project_workspaces` · `add_project_workspace` · `update_project_workspace` · `delete_project_workspace` |
+| **Goals** | `list_goals` · `get_goal` · `create_goal` · `update_goal` |
+| **Secrets** | `list_secrets` · `create_secret` · `rotate_secret` |
+| **Secret Providers** | `list_secret_provider_configs` · `get_secret_provider_config` · `create_secret_provider_config` · `update_secret_provider_config` · `disable_secret_provider_config` · `set_default_secret_provider_config` · `check_secret_provider_health` · `get_secret_providers_health` |
+| **Approvals** | `list_approvals` · `get_approval` · `approve` · `reject` · `request_approval_revision` · `create_approval_request` · `create_hire_request` · `resubmit_approval` · `list_approval_issues` · `list_approval_comments` · `comment_on_approval` |
+| **Costs & Monitoring** | `get_cost_summary` · `get_costs_by_agent` · `get_costs_by_project` · `report_cost_event` · `get_dashboard` · `list_activity` |
 
 ---
 
@@ -133,7 +145,22 @@ Once registered, you can ask your AI assistant:
 → calls list_approvals(status="pending") + approve(approval_id="...")
 
 "How much have we spent on tokens this month, broken down by agent?"
-→ calls get_cost_summary()
+→ calls get_costs_by_agent()
+
+"Pause the Marketing agent and check its error state"
+→ calls pause_agent(agent_id="...") + get_agent(agent_id="...")
+
+"Create a daily routine that runs at 9am"
+→ calls create_routine(...) + add_routine_trigger(kind="schedule", cron="0 9 * * *", ...)
+
+"Show me the revision history of the plan document on issue #42"
+→ calls list_issue_document_revisions(issue_id="...", key="plan")
+
+"What projects are active and how are their workspaces configured?"
+→ calls list_projects() + list_project_workspaces(project_id="...")
+
+"Check the health of all secret provider vaults"
+→ calls get_secret_providers_health()
 
 "Wake up the Administration agent now"
 → calls invoke_agent_heartbeat(agent_id="...")
