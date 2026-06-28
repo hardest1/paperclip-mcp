@@ -776,6 +776,89 @@ async def rotate_trigger_secret(trigger_id: str) -> Any:
     return await _post(f"/routine-triggers/{trigger_id}/rotate-secret")
 
 
+# ── ROUTINE RUNS & REVISIONS ─────────────────────────────────────────────────
+
+@mcp.tool()
+async def run_routine(
+    routine_id: str,
+    trigger_id: str = "",
+    payload: str = "",
+    idempotency_key: str = "",
+) -> Any:
+    """Manually trigger a routine run.
+
+    The routine's concurrency policy still applies — if the routine is
+    already running and the policy is skip_if_active, this call may be
+    rejected.
+
+    Args:
+        routine_id: UUID of the routine to run.
+        trigger_id: Optional trigger UUID to associate with this run.
+        payload: Optional JSON payload to pass to the routine
+                 (e.g. '{"key":"value"}').
+        idempotency_key: Optional key to prevent duplicate runs.
+    """
+    body: dict[str, Any] = {"source": "manual"}
+    if trigger_id:
+        body["triggerId"] = trigger_id
+    if payload:
+        import json as _json
+
+        try:
+            body["payload"] = _json.loads(payload)
+        except _json.JSONDecodeError:
+            return _err("payload must be valid JSON.")
+    if idempotency_key:
+        body["idempotencyKey"] = idempotency_key
+    return await _post(f"/routines/{routine_id}/run", body)
+
+
+@mcp.tool()
+async def list_routine_runs(
+    routine_id: str,
+    limit: int = 50,
+) -> Any:
+    """List recent runs for a routine.
+
+    Args:
+        routine_id: UUID of the routine.
+        limit: Maximum number of runs to return (1–200). Default: 50.
+    """
+    return await _get(
+        f"/routines/{routine_id}/runs",
+        {"limit": max(1, min(limit, 200))},
+    )
+
+
+@mcp.tool()
+async def list_routine_revisions(routine_id: str) -> Any:
+    """List definition revisions for a routine, newest first.
+
+    Revisions are append-only — every update creates a new revision.
+
+    Args:
+        routine_id: UUID of the routine.
+    """
+    return await _get(f"/routines/{routine_id}/revisions")
+
+
+@mcp.tool()
+async def restore_routine_revision(
+    routine_id: str,
+    revision_id: str,
+) -> Any:
+    """Restore a routine to a previous revision.
+
+    Creates a new latest revision copied from the selected historical
+    revision.
+
+    Args:
+        routine_id: UUID of the routine.
+        revision_id: UUID of the revision to restore.
+    """
+    return await _post(f"/routines/{routine_id}/revisions/{revision_id}/restore")
+
+
 # ── GOALS ──────────────────────────────────────────────────────────────────────
 
 @mcp.tool()
