@@ -1878,20 +1878,36 @@ async def get_dashboard() -> Any:
     return await _get(f"/companies/{COMPANY}/dashboard")
 
 
+_ENTITY_TYPES = {"issue", "agent", "approval"}
+
+
 @mcp.tool()
 async def list_activity(
     agent_id: str = "",
+    entity_type: str = "",
+    entity_id: str = "",
     limit: int = 20,
 ) -> Any:
     """Retrieve the audit trail of recent actions in the active company.
 
     Args:
         agent_id: Filter to a specific agent UUID. Leave empty for all agents.
+        entity_type: Filter by entity type: "issue", "agent", or "approval".
+        entity_id: Filter by specific entity UUID.
         limit: Maximum number of entries to return (1–100). Default: 20.
     """
+    if entity_type and entity_type not in _ENTITY_TYPES:
+        return _err(
+            f"Invalid entity_type '{entity_type}'. "
+            f"Allowed: {', '.join(sorted(_ENTITY_TYPES))}"
+        )
     params: dict[str, Any] = {"limit": max(1, min(limit, 100))}
     if agent_id:
         params["agentId"] = agent_id
+    if entity_type:
+        params["entityType"] = entity_type
+    if entity_id:
+        params["entityId"] = entity_id
     return await _get(f"/companies/{COMPANY}/activity", params)
 
 
