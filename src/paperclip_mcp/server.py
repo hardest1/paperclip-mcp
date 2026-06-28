@@ -18,6 +18,7 @@ Configuration (environment variables):
 
 from __future__ import annotations
 
+import base64
 import logging
 import os
 import sys
@@ -130,6 +131,37 @@ async def _delete(path: str) -> Any:
 
 async def _put(path: str, body: dict[str, Any]) -> Any:
     return await _request("PUT", path, body=body)
+
+
+async def _upload_file(
+    path: str,
+    filename: str,
+    data: bytes,
+    content_type: str = "application/octet-stream",
+) -> Any:
+    """Upload a file via multipart/form-data."""
+    url = f"{BASE_URL}{path}"
+    try:
+        async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
+            r = await client.post(
+                url,
+                headers={"Authorization": f"Bearer {API_KEY}"},
+                files={"file": (filename, data, content_type)},
+            )
+            r.raise_for_status()
+            if r.status_code == 204 or not r.content:
+                return {"ok": True}
+            return r.json()
+    except httpx.HTTPStatusError as exc:
+        return _err(
+            f"HTTP {exc.response.status_code} from Paperclip API: {exc.response.text[:400]}",
+            status=exc.response.status_code,
+        )
+    except httpx.RequestError as exc:
+        return _err(
+            f"Could not reach Paperclip at {BASE_URL}. "
+            f"Is the server running? Error: {exc}"
+        )
 
 
 # ── Startup validation ─────────────────────────────────────────────────────────
@@ -583,6 +615,69 @@ async def delete_issue_document(issue_id: str, key: str) -> Any:
         key: Document key to delete.
     """
     return await _delete(f"/issues/{issue_id}/documents/{key}")
+
+
+# ── ISSUE ATTACHMENTS ────────────────────────────────────────────────────────
+
+
+@mcp.tool()
+async def list_issue_attachments(issue_id: str) -> Any:
+    """List file attachments on an issue.
+
+    Args:
+        issue_id: Issue UUID or identifier.
+    """
+    return await _get(f"/issues/{issue_id}/attachments")
+
+
+@mcp.tool()
+async def download_attachment(attachment_id: str) -> Any:
+    """Download the content of an attachment.
+
+    Args:
+        attachment_id: Attachment UUID.
+    """
+    return await _get(f"/attachments/{attachment_id}/content")
+
+
+@mcp.tool()
+async def delete_attachment(attachment_id: str) -> Any:
+    """Delete an attachment.
+
+    Args:
+        attachment_id: Attachment UUID.
+    """
+    return await _delete(f"/attachments/{attachment_id}")
+
+
+@mcp.tool()
+async def upload_issue_attachment(
+    issue_id: str,
+    filename: str,
+    content_base64: str,
+    content_type: str = "application/octet-stream",
+) -> Any:
+    """Upload a file attachment to an issue.
+
+    The file content must be provided as a base64-encoded string because MCP
+    tool parameters are text-only.
+
+    Args:
+        issue_id: Issue UUID or identifier.
+        filename: Name for the uploaded file (e.g. "report.pdf").
+        content_base64: File content encoded as base64.
+        content_type: MIME type (default "application/octet-stream").
+    """
+    try:
+        data = base64.b64decode(content_base64)
+    except Exception:
+        return _err("Invalid base64 in content_base64 parameter.")
+    return await _upload_file(
+        f"/companies/{COMPANY}/issues/{issue_id}/attachments",
+        filename,
+        data,
+        content_type,
+    )
 
 
 # ── COMPANIES ─────────────────────────────────────────────────────────────────
