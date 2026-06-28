@@ -1169,16 +1169,26 @@ async def list_approvals(status: str = "pending") -> Any:
 
 
 @mcp.tool()
+async def get_approval(approval_id: str) -> Any:
+    """Get full details of an approval request.
+
+    Args:
+        approval_id: Approval UUID.
+    """
+    return await _get(f"/approvals/{approval_id}")
+
+
+@mcp.tool()
 async def approve(approval_id: str, comment: str = "") -> Any:
     """Approve a pending approval request.
 
     Args:
         approval_id: Approval UUID.
-        comment: Optional approval note to attach (e.g. conditions, context).
+        comment: Optional decision note (e.g. conditions, context).
     """
     body: dict[str, Any] = {}
     if comment:
-        body["comment"] = comment
+        body["decisionNote"] = comment
     return await _post(f"/approvals/{approval_id}/approve", body)
 
 
@@ -1188,11 +1198,12 @@ async def reject(approval_id: str, comment: str = "") -> Any:
 
     Args:
         approval_id: Approval UUID.
-        comment: Reason for rejection — strongly recommended so the agent understands why.
+        comment: Reason for rejection — strongly recommended so the
+                 agent understands why.
     """
     body: dict[str, Any] = {}
     if comment:
-        body["comment"] = comment
+        body["decisionNote"] = comment
     return await _post(f"/approvals/{approval_id}/reject", body)
 
 
@@ -1204,11 +1215,130 @@ async def request_approval_revision(approval_id: str, comment: str) -> Any:
 
     Args:
         approval_id: Approval UUID.
-        comment: Required. Specific feedback describing what must change before approval.
+        comment: Required. Specific feedback describing what must
+                 change before approval.
     """
     if not comment.strip():
         return _err("A comment is required when requesting a revision.")
-    return await _post(f"/approvals/{approval_id}/request-revision", {"comment": comment})
+    return await _post(
+        f"/approvals/{approval_id}/request-revision",
+        {"comment": comment},
+    )
+
+
+@mcp.tool()
+async def create_approval_request(
+    approval_type: str,
+    requested_by_agent_id: str,
+    payload: str = "",
+) -> Any:
+    """Create a new approval request.
+
+    Args:
+        approval_type: Approval type (e.g. "budget_increase",
+                       "hire_agent").
+        requested_by_agent_id: UUID of the agent requesting approval.
+        payload: JSON string with type-specific data
+                 (e.g. '{"amount":5000}').
+    """
+    body: dict[str, Any] = {
+        "type": approval_type,
+        "requestedByAgentId": requested_by_agent_id,
+    }
+    if payload:
+        import json as _json
+
+        try:
+            body["payload"] = _json.loads(payload)
+        except _json.JSONDecodeError:
+            return _err("payload must be valid JSON.")
+    return await _post(f"/companies/{COMPANY}/approvals", body)
+
+
+@mcp.tool()
+async def create_hire_request(
+    name: str,
+    role: str,
+    budget_monthly_cents: int = 0,
+    reports_to: str = "",
+    capabilities: str = "",
+) -> Any:
+    """Create an agent hire request (draft agent + hire approval).
+
+    This creates a draft agent and a linked hire_agent approval that
+    must be approved before the agent becomes active.
+
+    Args:
+        name: Name for the new agent.
+        role: Role description (e.g. "researcher", "engineer").
+        budget_monthly_cents: Monthly budget cap in cents.
+        reports_to: UUID of the agent this one reports to.
+        capabilities: Comma-separated capability tags.
+    """
+    body: dict[str, Any] = {"name": name, "role": role}
+    if budget_monthly_cents:
+        body["budgetMonthlyCents"] = budget_monthly_cents
+    if reports_to:
+        body["reportsTo"] = reports_to
+    if capabilities:
+        body["capabilities"] = capabilities
+    return await _post(f"/companies/{COMPANY}/agent-hires", body)
+
+
+@mcp.tool()
+async def resubmit_approval(approval_id: str, payload: str) -> Any:
+    """Resubmit an approval after revision was requested.
+
+    Part of the revision_requested → resubmitted → pending flow.
+
+    Args:
+        approval_id: Approval UUID.
+        payload: JSON string with the updated configuration.
+    """
+    import json as _json
+
+    try:
+        parsed = _json.loads(payload)
+    except _json.JSONDecodeError:
+        return _err("payload must be valid JSON.")
+    return await _post(
+        f"/approvals/{approval_id}/resubmit",
+        {"payload": parsed},
+    )
+
+
+@mcp.tool()
+async def list_approval_issues(approval_id: str) -> Any:
+    """List issues linked to an approval.
+
+    Args:
+        approval_id: Approval UUID.
+    """
+    return await _get(f"/approvals/{approval_id}/issues")
+
+
+@mcp.tool()
+async def list_approval_comments(approval_id: str) -> Any:
+    """List comments on an approval.
+
+    Args:
+        approval_id: Approval UUID.
+    """
+    return await _get(f"/approvals/{approval_id}/comments")
+
+
+@mcp.tool()
+async def comment_on_approval(approval_id: str, body: str) -> Any:
+    """Add a comment to an approval request.
+
+    Args:
+        approval_id: Approval UUID.
+        body: Comment text (Markdown supported).
+    """
+    return await _post(
+        f"/approvals/{approval_id}/comments",
+        {"body": body},
+    )
 
 
 # ── COSTS & MONITORING ─────────────────────────────────────────────────────────
