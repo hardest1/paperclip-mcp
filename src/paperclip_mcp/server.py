@@ -859,6 +859,202 @@ async def restore_routine_revision(
     return await _post(f"/routines/{routine_id}/revisions/{revision_id}/restore")
 
 
+# ── PROJECTS ──────────────────────────────────────────────────────────────────
+
+@mcp.tool()
+async def list_projects() -> Any:
+    """List all projects in the active company."""
+    return await _get(f"/companies/{COMPANY}/projects")
+
+
+@mcp.tool()
+async def get_project(project_id: str) -> Any:
+    """Get full details of a project including its workspaces.
+
+    Args:
+        project_id: Project UUID.
+    """
+    return await _get(f"/projects/{project_id}")
+
+
+@mcp.tool()
+async def create_project(
+    name: str,
+    description: str = "",
+    goal_ids: str = "",
+    status: str = "",
+    workspace_name: str = "",
+    workspace_cwd: str = "",
+    workspace_repo_url: str = "",
+    workspace_repo_ref: str = "",
+    workspace_is_primary: bool = False,
+) -> Any:
+    """Create a new project, optionally seeding an initial workspace.
+
+    Args:
+        name: Project name.
+        description: Project description (Markdown).
+        goal_ids: Comma-separated goal UUIDs to link to.
+        status: Project status (e.g. "active", "completed").
+        workspace_name: Name for the initial workspace (seeds a
+                        workspace if provided alongside cwd or repo_url).
+        workspace_cwd: Local directory path for the workspace.
+        workspace_repo_url: Git repository URL for the workspace.
+        workspace_repo_ref: Git ref (branch/tag) for the workspace.
+        workspace_is_primary: Mark the initial workspace as primary.
+    """
+    body: dict[str, Any] = {"name": name}
+    if description:
+        body["description"] = description
+    if goal_ids:
+        body["goalIds"] = [g.strip() for g in goal_ids.split(",") if g.strip()]
+    if status:
+        body["status"] = status
+    if workspace_name or workspace_cwd or workspace_repo_url:
+        ws: dict[str, Any] = {}
+        if workspace_name:
+            ws["name"] = workspace_name
+        if workspace_cwd:
+            ws["cwd"] = workspace_cwd
+        if workspace_repo_url:
+            ws["repoUrl"] = workspace_repo_url
+        if workspace_repo_ref:
+            ws["repoRef"] = workspace_repo_ref
+        if workspace_is_primary:
+            ws["isPrimary"] = True
+        body["workspace"] = ws
+    return await _post(f"/companies/{COMPANY}/projects", body)
+
+
+@mcp.tool()
+async def update_project(
+    project_id: str,
+    name: str = "",
+    description: str = "",
+    status: str = "",
+) -> Any:
+    """Update an existing project. Only fields you provide are changed.
+
+    Args:
+        project_id: Project UUID.
+        name: New project name.
+        description: New description (Markdown).
+        status: New status (e.g. "active", "completed").
+    """
+    body: dict[str, Any] = {}
+    if name:
+        body["name"] = name
+    if description:
+        body["description"] = description
+    if status:
+        body["status"] = status
+    if not body:
+        return _err(
+            "No fields to update. Provide at least one of: "
+            "name, description, status."
+        )
+    return await _patch(f"/projects/{project_id}", body)
+
+
+# ── PROJECT WORKSPACES ────────────────────────────────────────────────────────
+
+@mcp.tool()
+async def list_project_workspaces(project_id: str) -> Any:
+    """List workspaces for a project.
+
+    Args:
+        project_id: Project UUID.
+    """
+    return await _get(f"/projects/{project_id}/workspaces")
+
+
+@mcp.tool()
+async def add_project_workspace(
+    project_id: str,
+    name: str,
+    cwd: str = "",
+    repo_url: str = "",
+    repo_ref: str = "",
+    is_primary: bool = False,
+) -> Any:
+    """Add a workspace to a project.
+
+    At least one of cwd or repo_url is required.
+
+    Args:
+        project_id: Project UUID.
+        name: Workspace name.
+        cwd: Local directory path.
+        repo_url: Git repository URL.
+        repo_ref: Git ref (branch/tag).
+        is_primary: Mark as the primary workspace.
+    """
+    body: dict[str, Any] = {"name": name}
+    if cwd:
+        body["cwd"] = cwd
+    if repo_url:
+        body["repoUrl"] = repo_url
+    if repo_ref:
+        body["repoRef"] = repo_ref
+    if is_primary:
+        body["isPrimary"] = True
+    return await _post(f"/projects/{project_id}/workspaces", body)
+
+
+@mcp.tool()
+async def update_project_workspace(
+    project_id: str,
+    workspace_id: str,
+    name: str = "",
+    cwd: str = "",
+    repo_url: str = "",
+    repo_ref: str = "",
+    is_primary: bool | None = None,
+) -> Any:
+    """Update a project workspace. Only fields you provide are changed.
+
+    Args:
+        project_id: Project UUID.
+        workspace_id: Workspace UUID.
+        name: New workspace name.
+        cwd: New local directory path.
+        repo_url: New Git repository URL.
+        repo_ref: New Git ref (branch/tag).
+        is_primary: Set as primary workspace.
+    """
+    body: dict[str, Any] = {}
+    if name:
+        body["name"] = name
+    if cwd:
+        body["cwd"] = cwd
+    if repo_url:
+        body["repoUrl"] = repo_url
+    if repo_ref:
+        body["repoRef"] = repo_ref
+    if is_primary is not None:
+        body["isPrimary"] = is_primary
+    if not body:
+        return _err(
+            "No fields to update. Provide at least one of: "
+            "name, cwd, repo_url, repo_ref, is_primary."
+        )
+    return await _patch(f"/projects/{project_id}/workspaces/{workspace_id}", body)
+
+
+@mcp.tool()
+async def delete_project_workspace(
+    project_id: str,
+    workspace_id: str,
+) -> Any:
+    """Delete a workspace from a project.
+
+    Args:
+        project_id: Project UUID.
+        workspace_id: Workspace UUID to delete.
+    """
+    return await _delete(f"/projects/{project_id}/workspaces/{workspace_id}")
+
+
 # ── GOALS ──────────────────────────────────────────────────────────────────────
 
 @mcp.tool()
