@@ -128,6 +128,10 @@ async def _delete(path: str) -> Any:
     return await _request("DELETE", path)
 
 
+async def _put(path: str, body: dict[str, Any]) -> Any:
+    return await _request("PUT", path, body=body)
+
+
 # ── Startup validation ─────────────────────────────────────────────────────────
 
 def _validate_config() -> None:
@@ -505,6 +509,80 @@ async def respond_to_issue_interaction(
         f"/issues/{issue_id}/interactions/{interaction_id}/respond",
         parsed,
     )
+
+
+# ── ISSUE DOCUMENTS ──────────────────────────────────────────────────────────
+
+
+@mcp.tool()
+async def list_issue_documents(issue_id: str) -> Any:
+    """List all documents attached to an issue.
+
+    Args:
+        issue_id: Issue UUID or identifier.
+    """
+    return await _get(f"/issues/{issue_id}/documents")
+
+
+@mcp.tool()
+async def get_issue_document(issue_id: str, key: str) -> Any:
+    """Get a single issue document by its stable key.
+
+    Args:
+        issue_id: Issue UUID or identifier.
+        key: Document key (e.g. "plan", "design", "notes").
+    """
+    return await _get(f"/issues/{issue_id}/documents/{key}")
+
+
+@mcp.tool()
+async def upsert_issue_document(
+    issue_id: str,
+    key: str,
+    title: str,
+    body: str,
+    format: str = "markdown",
+    base_revision_id: str = "",
+) -> Any:
+    """Create or update an issue document (revisioned text artifact).
+
+    Omit base_revision_id when creating a new document. When updating, pass the
+    current revision ID for optimistic concurrency — a stale ID returns 409.
+
+    Args:
+        issue_id: Issue UUID or identifier.
+        key: Stable document key (e.g. "plan", "design", "notes").
+        title: Human-readable document title.
+        body: Document content.
+        format: Content format (default "markdown").
+        base_revision_id: Current revision ID for optimistic concurrency on updates.
+    """
+    payload: dict[str, Any] = {"title": title, "format": format, "body": body}
+    if base_revision_id:
+        payload["baseRevisionId"] = base_revision_id
+    return await _put(f"/issues/{issue_id}/documents/{key}", payload)
+
+
+@mcp.tool()
+async def list_issue_document_revisions(issue_id: str, key: str) -> Any:
+    """List revision history for an issue document.
+
+    Args:
+        issue_id: Issue UUID or identifier.
+        key: Document key (e.g. "plan", "design", "notes").
+    """
+    return await _get(f"/issues/{issue_id}/documents/{key}/revisions")
+
+
+@mcp.tool()
+async def delete_issue_document(issue_id: str, key: str) -> Any:
+    """Delete an issue document.
+
+    Args:
+        issue_id: Issue UUID or identifier.
+        key: Document key to delete.
+    """
+    return await _delete(f"/issues/{issue_id}/documents/{key}")
 
 
 # ── COMPANIES ─────────────────────────────────────────────────────────────────
