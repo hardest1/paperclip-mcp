@@ -753,6 +753,67 @@ async def terminate_agent(agent_id: str) -> Any:
     return await _post(f"/agents/{agent_id}/terminate")
 
 
+@mcp.tool()
+async def create_agent_api_key(agent_id: str) -> Any:
+    """Create a long-lived API key for an agent.
+
+    WARNING: The full key value is returned only once in this response.
+    Store it immediately — it cannot be retrieved again.
+
+    Args:
+        agent_id: UUID of the agent.
+    """
+    return await _post(f"/agents/{agent_id}/keys")
+
+
+@mcp.tool()
+async def list_agent_config_revisions(agent_id: str) -> Any:
+    """List configuration change history for an agent.
+
+    Args:
+        agent_id: UUID of the agent.
+    """
+    return await _get(f"/agents/{agent_id}/config-revisions")
+
+
+@mcp.tool()
+async def rollback_agent_config(
+    agent_id: str,
+    revision_id: str,
+) -> Any:
+    """Roll back an agent's configuration to a previous revision.
+
+    Args:
+        agent_id: UUID of the agent.
+        revision_id: UUID of the config revision to restore.
+    """
+    return await _post(
+        f"/agents/{agent_id}/config-revisions/{revision_id}/rollback",
+    )
+
+
+@mcp.tool()
+async def get_org_chart() -> Any:
+    """Get the full organizational chart for the active company.
+
+    Returns the agent hierarchy tree showing reporting relationships.
+    """
+    return await _get(f"/companies/{COMPANY}/org")
+
+
+@mcp.tool()
+async def list_adapter_models(adapter_type: str) -> Any:
+    """List available models for an adapter type.
+
+    Args:
+        adapter_type: Adapter type (e.g. "claude", "openai",
+                      "codex_local", "opencode_local").
+    """
+    return await _get(
+        f"/companies/{COMPANY}/adapters/{adapter_type}/models",
+    )
+
+
 # ── ROUTINES ──────────────────────────────────────────────────────────────────
 
 _CONCURRENCY_POLICIES = {"coalesce_if_active", "skip_if_active", "always_enqueue"}
