@@ -387,6 +387,126 @@ async def delete_issue(issue_id: str) -> Any:
     return await _delete(f"/issues/{issue_id}")
 
 
+# ── ISSUE INTERACTIONS ────────────────────────────────────────────────────────
+
+_INTERACTION_KINDS = {"suggest_tasks", "ask_user_questions", "request_confirmation"}
+
+
+@mcp.tool()
+async def list_issue_interactions(issue_id: str) -> Any:
+    """List structured interactions on an issue.
+
+    Args:
+        issue_id: Issue UUID or identifier.
+    """
+    return await _get(f"/issues/{issue_id}/interactions")
+
+
+@mcp.tool()
+async def create_issue_interaction(
+    issue_id: str,
+    kind: str,
+    title: str,
+    summary: str = "",
+    idempotency_key: str = "",
+    continuation_policy: str = "",
+    payload: str = "",
+) -> Any:
+    """Create a structured interaction card on an issue.
+
+    Interactions let agents present choices, questions, or confirmations
+    to users through the Paperclip UI.
+
+    Args:
+        issue_id: Issue UUID or identifier.
+        kind: Interaction kind — suggest_tasks,
+              ask_user_questions, or request_confirmation.
+        title: Card title shown in the UI.
+        summary: Brief description of what the interaction asks.
+        idempotency_key: Key to prevent duplicate interactions.
+        continuation_policy: How the agent proceeds (e.g. "block").
+        payload: JSON string with kind-specific data (e.g.
+                 '{"prompt":"Ready?","acceptLabel":"Yes"}').
+    """
+    if kind not in _INTERACTION_KINDS:
+        return _err(
+            f"Invalid kind '{kind}'. "
+            f"Allowed: {', '.join(sorted(_INTERACTION_KINDS))}."
+        )
+    body: dict[str, Any] = {"kind": kind, "title": title}
+    if summary:
+        body["summary"] = summary
+    if idempotency_key:
+        body["idempotencyKey"] = idempotency_key
+    if continuation_policy:
+        body["continuationPolicy"] = continuation_policy
+    if payload:
+        import json as _json
+
+        try:
+            body["payload"] = _json.loads(payload)
+        except _json.JSONDecodeError:
+            return _err("payload must be valid JSON.")
+    return await _post(f"/issues/{issue_id}/interactions", body)
+
+
+@mcp.tool()
+async def accept_issue_interaction(
+    issue_id: str,
+    interaction_id: str,
+) -> Any:
+    """Accept an issue interaction (e.g. confirm a proposal).
+
+    Args:
+        issue_id: Issue UUID or identifier.
+        interaction_id: Interaction UUID.
+    """
+    return await _post(
+        f"/issues/{issue_id}/interactions/{interaction_id}/accept",
+    )
+
+
+@mcp.tool()
+async def reject_issue_interaction(
+    issue_id: str,
+    interaction_id: str,
+) -> Any:
+    """Reject an issue interaction.
+
+    Args:
+        issue_id: Issue UUID or identifier.
+        interaction_id: Interaction UUID.
+    """
+    return await _post(
+        f"/issues/{issue_id}/interactions/{interaction_id}/reject",
+    )
+
+
+@mcp.tool()
+async def respond_to_issue_interaction(
+    issue_id: str,
+    interaction_id: str,
+    response: str = "",
+) -> Any:
+    """Respond to an issue interaction with structured data.
+
+    Args:
+        issue_id: Issue UUID or identifier.
+        interaction_id: Interaction UUID.
+        response: JSON string with the response data.
+    """
+    import json as _json
+
+    try:
+        parsed = _json.loads(response) if response else {}
+    except _json.JSONDecodeError:
+        return _err("response must be valid JSON.")
+    return await _post(
+        f"/issues/{issue_id}/interactions/{interaction_id}/respond",
+        parsed,
+    )
+
+
 # ── COMPANIES ─────────────────────────────────────────────────────────────────
 
 @mcp.tool()
