@@ -649,9 +649,11 @@ async def upsert_issue_document(
         key: Stable document key (e.g. "plan", "design", "notes").
         title: Human-readable document title.
         body: Document content.
-        format: Content format (default "markdown").
+        format: Content format. The API currently supports only "markdown".
         base_revision_id: Current revision ID for optimistic concurrency on updates.
     """
+    if format != "markdown":
+        return _err("format must be 'markdown'.")
     payload: dict[str, Any] = {"title": title, "format": format, "body": body}
     if base_revision_id:
         payload["baseRevisionId"] = base_revision_id

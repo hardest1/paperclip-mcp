@@ -67,18 +67,18 @@ async def test_upsert_issue_document_update_with_revision() -> None:
 
 
 @pytest.mark.asyncio
-async def test_upsert_issue_document_custom_format() -> None:
+async def test_upsert_issue_document_rejects_non_markdown_format() -> None:
     with patch("paperclip_mcp.server._put", new_callable=AsyncMock) as mock:
-        mock.return_value = {"key": "notes", "revisionId": "rev1"}
-        await upsert_issue_document(
+        result = await upsert_issue_document(
             issue_id="i1",
             key="notes",
             title="Notes",
             body="plain text",
             format="plaintext",
         )
-        call_body = mock.call_args[0][1]
-        assert call_body["format"] == "plaintext"
+        assert result["isError"] is True
+        assert "markdown" in result["message"]
+        mock.assert_not_called()
 
 
 @pytest.mark.asyncio
