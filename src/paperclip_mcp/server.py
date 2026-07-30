@@ -176,6 +176,38 @@ async def _upload_file(
         )
 
 
+async def _download_file(path: str) -> Any:
+    """Download binary content and encode it for transport through MCP."""
+    url = f"{BASE_URL}{path}"
+    try:
+        async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
+            r = await client.get(
+                url,
+                headers={"Authorization": f"Bearer {API_KEY}"},
+            )
+            r.raise_for_status()
+            return {
+                "contentBase64": base64.b64encode(r.content).decode("ascii"),
+                "contentType": r.headers.get(
+                    "content-type",
+                    "application/octet-stream",
+                ),
+                "contentDisposition": r.headers.get("content-disposition", ""),
+                "sizeBytes": len(r.content),
+            }
+    except httpx.HTTPStatusError as exc:
+        return _err(
+            f"HTTP {exc.response.status_code} from Paperclip API: "
+            f"{exc.response.text[:400]}",
+            status=exc.response.status_code,
+        )
+    except httpx.RequestError as exc:
+        return _err(
+            f"Could not reach Paperclip at {BASE_URL}. "
+            f"Is the server running? Error: {exc}"
+        )
+
+
 # ── Startup validation ─────────────────────────────────────────────────────────
 
 def _validate_config() -> None:
@@ -701,12 +733,12 @@ async def list_issue_attachments(issue_id: str) -> Any:
 
 @mcp.tool()
 async def download_attachment(attachment_id: str) -> Any:
-    """Download the content of an attachment.
+    """Download attachment bytes as base64-encoded content and metadata.
 
     Args:
         attachment_id: Attachment UUID.
     """
-    return await _get(f"/attachments/{attachment_id}/content")
+    return await _download_file(f"/attachments/{attachment_id}/content")
 
 
 @mcp.tool()
@@ -741,8 +773,8 @@ async def upload_issue_attachment(
     """
     cid = _resolve_company(company_id)
     try:
-        data = base64.b64decode(content_base64)
-    except Exception:
+        data = base64.b64decode(content_base64, validate=True)
+    except (ValueError, base64.binascii.Error):
         return _err("Invalid base64 in content_base64 parameter.")
     return await _upload_file(
         f"/companies/{cid}/issues/{issue_id}/attachments",
