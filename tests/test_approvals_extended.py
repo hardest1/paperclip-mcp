@@ -134,6 +134,18 @@ async def test_resubmit_approval_invalid_payload() -> None:
 
 
 @pytest.mark.asyncio
+async def test_resubmit_approval_rejects_non_object_payload() -> None:
+    with patch("paperclip_mcp.server._post", new_callable=AsyncMock) as mock:
+        result = await resubmit_approval(
+            approval_id="ap1",
+            payload='["not", "an", "object"]',
+        )
+        assert result["isError"] is True
+        assert "JSON object" in result["message"]
+        mock.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_list_approval_issues() -> None:
     with patch("paperclip_mcp.server._get", new_callable=AsyncMock) as mock:
         mock.return_value = [{"id": "i1"}]

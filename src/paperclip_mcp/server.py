@@ -2213,6 +2213,8 @@ async def resubmit_approval(approval_id: str, payload: str) -> Any:
         parsed = _json.loads(payload)
     except _json.JSONDecodeError:
         return _err("payload must be valid JSON.")
+    if not isinstance(parsed, dict):
+        return _err("payload must be a JSON object.")
     return await _post(
         f"/approvals/{approval_id}/resubmit",
         {"payload": parsed},
