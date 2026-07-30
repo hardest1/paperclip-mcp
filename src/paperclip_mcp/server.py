@@ -789,7 +789,7 @@ async def update_company(
     company_id: str,
     name: str = "",
     description: str = "",
-    budget_monthly_cents: int = 0,
+    budget_monthly_cents: int | None = None,
     logo_asset_id: str = "",
 ) -> Any:
     """Update an existing company. Only fields you provide are changed.
@@ -798,7 +798,7 @@ async def update_company(
         company_id: Company UUID.
         name: New company name.
         description: New description.
-        budget_monthly_cents: Monthly budget cap in cents (0 to skip).
+        budget_monthly_cents: Monthly budget cap in cents, including zero.
         logo_asset_id: Asset UUID for the company logo.
     """
     body: dict[str, Any] = {}
@@ -806,7 +806,7 @@ async def update_company(
         body["name"] = name
     if description:
         body["description"] = description
-    if budget_monthly_cents:
+    if budget_monthly_cents is not None:
         body["budgetMonthlyCents"] = budget_monthly_cents
     if logo_asset_id:
         body["logoAssetId"] = logo_asset_id

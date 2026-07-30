@@ -53,6 +53,14 @@ async def test_update_company() -> None:
 
 
 @pytest.mark.asyncio
+async def test_update_company_allows_zero_budget() -> None:
+    with patch("paperclip_mcp.server._patch", new_callable=AsyncMock) as mock:
+        mock.return_value = {"id": "c1"}
+        await update_company(company_id="c1", budget_monthly_cents=0)
+        mock.assert_called_once_with("/companies/c1", {"budgetMonthlyCents": 0})
+
+
+@pytest.mark.asyncio
 async def test_update_company_no_fields() -> None:
     result = await update_company(company_id="c1")
     assert result["isError"] is True
