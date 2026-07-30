@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -51,3 +52,24 @@ async def test_report_cost_event() -> None:
         assert call_body["inputTokens"] == 1000
         assert call_body["outputTokens"] == 500
         assert call_body["costCents"] == 12
+        occurred_at = datetime.fromisoformat(
+            call_body["occurredAt"].replace("Z", "+00:00")
+        )
+        assert occurred_at.tzinfo is not None
+
+
+@pytest.mark.asyncio
+async def test_report_cost_event_accepts_explicit_timestamp() -> None:
+    with patch("paperclip_mcp.server._post", new_callable=AsyncMock) as mock:
+        mock.return_value = {"id": "ce1"}
+        await report_cost_event(
+            agent_id="a1",
+            provider="openai",
+            model="gpt-4o",
+            input_tokens=1000,
+            output_tokens=500,
+            cost_cents=12,
+            occurred_at="2026-07-30T12:00:00Z",
+        )
+        call_body = mock.call_args[0][1]
+        assert call_body["occurredAt"] == "2026-07-30T12:00:00Z"

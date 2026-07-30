@@ -25,6 +25,7 @@ import logging
 import os
 import sys
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -2296,6 +2297,7 @@ async def report_cost_event(
     input_tokens: int,
     output_tokens: int,
     cost_cents: int,
+    occurred_at: str = "",
     company_id: str = "",
 ) -> Any:
     """Report a manual cost event for token usage tracking.
@@ -2310,6 +2312,7 @@ async def report_cost_event(
         input_tokens: Number of input tokens consumed.
         output_tokens: Number of output tokens consumed.
         cost_cents: Total cost in cents.
+        occurred_at: ISO-8601 timestamp for the event. Defaults to the current UTC time.
         company_id: Company UUID. Uses the active company if empty.
     """
     cid = _resolve_company(company_id)
@@ -2322,6 +2325,7 @@ async def report_cost_event(
             "inputTokens": input_tokens,
             "outputTokens": output_tokens,
             "costCents": cost_cents,
+            "occurredAt": occurred_at or datetime.now(UTC).isoformat(),
         },
     )
 
