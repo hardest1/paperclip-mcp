@@ -20,6 +20,16 @@ async def test_create_issue_with_goal_id() -> None:
 
 
 @pytest.mark.asyncio
+async def test_create_issue_with_parent_id() -> None:
+    with patch("paperclip_mcp.server._post", new_callable=AsyncMock) as mock:
+        mock.return_value = {"id": "i1"}
+        await create_issue(title="Task", parent_issue_id="i0")
+        call_body = mock.call_args[0][1]
+        assert call_body["parentId"] == "i0"
+        assert "parentIssueId" not in call_body
+
+
+@pytest.mark.asyncio
 async def test_update_issue_with_goal_id() -> None:
     with patch("paperclip_mcp.server._patch", new_callable=AsyncMock) as mock:
         mock.return_value = {"id": "i1"}

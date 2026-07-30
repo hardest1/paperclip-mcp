@@ -342,7 +342,7 @@ async def create_issue(
     if project_id:
         body["projectId"] = project_id
     if parent_issue_id:
-        body["parentIssueId"] = parent_issue_id
+        body["parentId"] = parent_issue_id
     if goal_id:
         body["goalId"] = goal_id
     return await _post(f"/companies/{cid}/issues", body)
