@@ -1371,9 +1371,12 @@ async def run_routine(
         import json as _json
 
         try:
-            body["payload"] = _json.loads(payload)
+            parsed_payload = _json.loads(payload)
         except _json.JSONDecodeError:
             return _err("payload must be valid JSON.")
+        if not isinstance(parsed_payload, dict):
+            return _err("payload must be a JSON object.")
+        body["payload"] = parsed_payload
     if idempotency_key:
         body["idempotencyKey"] = idempotency_key
     return await _post(f"/routines/{routine_id}/run", body)

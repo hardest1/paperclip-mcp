@@ -48,6 +48,13 @@ async def test_run_routine_invalid_payload() -> None:
 
 
 @pytest.mark.asyncio
+async def test_run_routine_rejects_non_object_payload() -> None:
+    result = await run_routine(routine_id="r1", payload='["not", "an", "object"]')
+    assert result["isError"] is True
+    assert "JSON object" in result["message"]
+
+
+@pytest.mark.asyncio
 async def test_list_routine_runs_default() -> None:
     with patch("paperclip_mcp.server._get", new_callable=AsyncMock) as mock:
         mock.return_value = [{"id": "run1"}]
