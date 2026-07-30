@@ -1483,7 +1483,19 @@ async def create_project(
         body["goalIds"] = [g.strip() for g in goal_ids.split(",") if g.strip()]
     if status:
         body["status"] = status
-    if workspace_name or workspace_cwd or workspace_repo_url:
+    has_workspace_fields = bool(
+        workspace_name
+        or workspace_cwd
+        or workspace_repo_url
+        or workspace_repo_ref
+        or workspace_is_primary
+    )
+    if has_workspace_fields and not (workspace_cwd or workspace_repo_url):
+        return _err(
+            "An initial workspace requires at least one of: "
+            "workspace_cwd or workspace_repo_url."
+        )
+    if has_workspace_fields:
         ws: dict[str, Any] = {}
         if workspace_name:
             ws["name"] = workspace_name
@@ -1563,6 +1575,8 @@ async def add_project_workspace(
         repo_ref: Git ref (branch/tag).
         is_primary: Mark as the primary workspace.
     """
+    if not (cwd or repo_url):
+        return _err("A workspace requires at least one of: cwd or repo_url.")
     body: dict[str, Any] = {"name": name}
     if cwd:
         body["cwd"] = cwd

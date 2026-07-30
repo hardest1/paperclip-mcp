@@ -87,6 +87,18 @@ async def test_create_project_workspace_with_cwd() -> None:
 
 
 @pytest.mark.asyncio
+async def test_create_project_rejects_workspace_without_source() -> None:
+    result = await create_project(
+        name="Beta",
+        workspace_name="local",
+        workspace_repo_ref="main",
+        workspace_is_primary=True,
+    )
+    assert result["isError"] is True
+    assert "cwd or workspace_repo_url" in result["message"]
+
+
+@pytest.mark.asyncio
 async def test_update_project() -> None:
     with patch("paperclip_mcp.server._patch", new_callable=AsyncMock) as mock:
         mock.return_value = {"id": "p1"}
@@ -122,6 +134,16 @@ async def test_add_project_workspace() -> None:
         call_body = mock.call_args[0][1]
         assert call_body["name"] == "staging"
         assert call_body["repoUrl"] == "https://github.com/org/repo"
+
+
+@pytest.mark.asyncio
+async def test_add_project_workspace_rejects_missing_source() -> None:
+    result = await add_project_workspace(
+        project_id="p1",
+        name="staging",
+    )
+    assert result["isError"] is True
+    assert "cwd or repo_url" in result["message"]
 
 
 @pytest.mark.asyncio
