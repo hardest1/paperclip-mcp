@@ -25,7 +25,7 @@ import logging
 import os
 import sys
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -2339,7 +2339,7 @@ async def report_cost_event(
             "inputTokens": input_tokens,
             "outputTokens": output_tokens,
             "costCents": cost_cents,
-            "occurredAt": occurred_at or datetime.now(UTC).isoformat(),
+            "occurredAt": occurred_at or datetime.now(timezone.utc).isoformat(),
         },
     )
 
