@@ -20,6 +20,7 @@ Configuration (environment variables):
 from __future__ import annotations
 
 import base64
+import binascii
 import logging
 import os
 import sys
@@ -774,7 +775,7 @@ async def upload_issue_attachment(
     cid = _resolve_company(company_id)
     try:
         data = base64.b64decode(content_base64, validate=True)
-    except (ValueError, base64.binascii.Error):
+    except (ValueError, binascii.Error):
         return _err("Invalid base64 in content_base64 parameter.")
     return await _upload_file(
         f"/companies/{cid}/issues/{issue_id}/attachments",
