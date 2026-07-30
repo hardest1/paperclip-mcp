@@ -913,8 +913,11 @@ async def update_agent(
     name: str = "",
     role: str = "",
     title: str = "",
+    reports_to: str = "",
+    capabilities: str = "",
+    adapter_type: str = "",
     adapter_config: str = "",
-    budget_monthly_cents: int = 0,
+    budget_monthly_cents: int | None = None,
 ) -> Any:
     """Update an existing agent. Only fields you provide are changed.
 
@@ -923,8 +926,11 @@ async def update_agent(
         name: New display name.
         role: New role description.
         title: New job title.
+        reports_to: UUID of the agent this one reports to.
+        capabilities: Comma-separated capability tags.
+        adapter_type: New LLM adapter type.
         adapter_config: JSON string with new adapter settings.
-        budget_monthly_cents: Monthly budget cap in cents (0 to skip).
+        budget_monthly_cents: Monthly budget cap in cents, including zero.
     """
     body: dict[str, Any] = {}
     if name:
@@ -933,6 +939,12 @@ async def update_agent(
         body["role"] = role
     if title:
         body["title"] = title
+    if reports_to:
+        body["reportsTo"] = reports_to
+    if capabilities:
+        body["capabilities"] = capabilities
+    if adapter_type:
+        body["adapterType"] = adapter_type
     if adapter_config:
         import json as _json
 
@@ -943,12 +955,13 @@ async def update_agent(
                 "adapter_config must be valid JSON "
                 '(e.g. \'{"model":"claude-sonnet-4-20250514"}\').'
             )
-    if budget_monthly_cents:
+    if budget_monthly_cents is not None:
         body["budgetMonthlyCents"] = budget_monthly_cents
     if not body:
         return _err(
             "No fields to update. Provide at least one of: "
-            "name, role, title, adapter_config, budget_monthly_cents."
+            "name, role, title, reports_to, capabilities, adapter_type, "
+            "adapter_config, budget_monthly_cents."
         )
     return await _patch(f"/agents/{agent_id}", body)
 

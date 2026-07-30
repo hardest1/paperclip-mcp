@@ -68,6 +68,34 @@ async def test_update_agent() -> None:
 
 
 @pytest.mark.asyncio
+async def test_update_agent_allows_zero_budget() -> None:
+    with patch("paperclip_mcp.server._patch", new_callable=AsyncMock) as mock:
+        mock.return_value = {"id": "a1"}
+        await update_agent(agent_id="a1", budget_monthly_cents=0)
+        mock.assert_called_once_with("/agents/a1", {"budgetMonthlyCents": 0})
+
+
+@pytest.mark.asyncio
+async def test_update_agent_organizational_and_adapter_fields() -> None:
+    with patch("paperclip_mcp.server._patch", new_callable=AsyncMock) as mock:
+        mock.return_value = {"id": "a1"}
+        await update_agent(
+            agent_id="a1",
+            reports_to="a0",
+            capabilities="code,review",
+            adapter_type="openai",
+        )
+        mock.assert_called_once_with(
+            "/agents/a1",
+            {
+                "reportsTo": "a0",
+                "capabilities": "code,review",
+                "adapterType": "openai",
+            },
+        )
+
+
+@pytest.mark.asyncio
 async def test_update_agent_no_fields() -> None:
     result = await update_agent(agent_id="a1")
     assert result["isError"] is True
