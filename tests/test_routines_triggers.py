@@ -64,6 +64,24 @@ async def test_add_trigger_invalid_kind() -> None:
 
 
 @pytest.mark.asyncio
+async def test_add_schedule_trigger_requires_cron_expression() -> None:
+    result = await add_routine_trigger(routine_id="r1", kind="schedule")
+    assert result["isError"] is True
+    assert "cron_expression" in result["message"]
+
+
+@pytest.mark.asyncio
+async def test_add_webhook_trigger_rejects_invalid_signing_mode() -> None:
+    result = await add_routine_trigger(
+        routine_id="r1",
+        kind="webhook",
+        signing_mode="invalid",
+    )
+    assert result["isError"] is True
+    assert "signing_mode" in result["message"]
+
+
+@pytest.mark.asyncio
 async def test_add_trigger_replay_window_too_low() -> None:
     result = await add_routine_trigger(
         routine_id="r1",
@@ -95,6 +113,16 @@ async def test_update_routine_trigger() -> None:
         call_body = mock.call_args[0][1]
         assert call_body["enabled"] is False
         assert call_body["cronExpression"] == "0 18 * * *"
+
+
+@pytest.mark.asyncio
+async def test_update_routine_trigger_rejects_invalid_signing_mode() -> None:
+    result = await update_routine_trigger(
+        trigger_id="t1",
+        signing_mode="invalid",
+    )
+    assert result["isError"] is True
+    assert "signing_mode" in result["message"]
 
 
 @pytest.mark.asyncio

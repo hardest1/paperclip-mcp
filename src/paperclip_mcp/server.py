@@ -1227,6 +1227,7 @@ async def update_routine(
 # ── ROUTINE TRIGGERS ──────────────────────────────────────────────────────────
 
 _TRIGGER_KINDS = {"schedule", "webhook", "api"}
+_TRIGGER_SIGNING_MODES = {"bearer", "hmac_sha256", "github_hmac", "none"}
 
 
 @mcp.tool()
@@ -1260,6 +1261,13 @@ async def add_routine_trigger(
         return _err(
             f"Invalid trigger kind '{kind}'. "
             f"Allowed: {', '.join(sorted(_TRIGGER_KINDS))}."
+        )
+    if kind == "schedule" and not cron_expression.strip():
+        return _err("cron_expression is required for schedule triggers.")
+    if signing_mode and signing_mode not in _TRIGGER_SIGNING_MODES:
+        return _err(
+            f"Invalid signing_mode '{signing_mode}'. "
+            f"Allowed: {', '.join(sorted(_TRIGGER_SIGNING_MODES))}."
         )
     if replay_window_sec and not (30 <= replay_window_sec <= 86400):
         return _err(
@@ -1296,6 +1304,11 @@ async def update_routine_trigger(
         signing_mode: New signing mode (webhook triggers).
         replay_window_sec: New replay window in seconds (30–86400).
     """
+    if signing_mode and signing_mode not in _TRIGGER_SIGNING_MODES:
+        return _err(
+            f"Invalid signing_mode '{signing_mode}'. "
+            f"Allowed: {', '.join(sorted(_TRIGGER_SIGNING_MODES))}."
+        )
     if replay_window_sec and not (30 <= replay_window_sec <= 86400):
         return _err("replay_window_sec must be between 30 and 86400.")
     body: dict[str, Any] = {}
