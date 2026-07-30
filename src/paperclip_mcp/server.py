@@ -938,12 +938,15 @@ async def create_agent(
         import json as _json
 
         try:
-            body["adapterConfig"] = _json.loads(adapter_config)
+            parsed_adapter_config = _json.loads(adapter_config)
         except _json.JSONDecodeError:
             return _err(
                 "adapter_config must be valid JSON "
                 '(e.g. \'{"model":"claude-sonnet-4-20250514"}\').'
             )
+        if not isinstance(parsed_adapter_config, dict):
+            return _err("adapter_config must be a JSON object.")
+        body["adapterConfig"] = parsed_adapter_config
     return await _post(f"/companies/{cid}/agents", body)
 
 
@@ -989,12 +992,15 @@ async def update_agent(
         import json as _json
 
         try:
-            body["adapterConfig"] = _json.loads(adapter_config)
+            parsed_adapter_config = _json.loads(adapter_config)
         except _json.JSONDecodeError:
             return _err(
                 "adapter_config must be valid JSON "
                 '(e.g. \'{"model":"claude-sonnet-4-20250514"}\').'
             )
+        if not isinstance(parsed_adapter_config, dict):
+            return _err("adapter_config must be a JSON object.")
+        body["adapterConfig"] = parsed_adapter_config
     if budget_monthly_cents is not None:
         body["budgetMonthlyCents"] = budget_monthly_cents
     if not body:

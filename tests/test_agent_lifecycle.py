@@ -59,6 +59,19 @@ async def test_create_agent_invalid_adapter_config() -> None:
 
 
 @pytest.mark.asyncio
+async def test_create_agent_rejects_non_object_adapter_config() -> None:
+    with patch("paperclip_mcp.server._post", new_callable=AsyncMock) as mock:
+        result = await create_agent(
+            name="X",
+            adapter_type="claude",
+            adapter_config='"not an object"',
+        )
+        assert result["isError"] is True
+        assert "JSON object" in result["message"]
+        mock.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_update_agent() -> None:
     with patch("paperclip_mcp.server._patch", new_callable=AsyncMock) as mock:
         mock.return_value = {"id": "a1", "name": "Alice"}
@@ -108,6 +121,18 @@ async def test_update_agent_adapter_config_json() -> None:
         await update_agent(agent_id="a1", adapter_config='{"model":"sonnet"}')
         call_body = mock.call_args[0][1]
         assert call_body["adapterConfig"] == {"model": "sonnet"}
+
+
+@pytest.mark.asyncio
+async def test_update_agent_rejects_non_object_adapter_config() -> None:
+    with patch("paperclip_mcp.server._patch", new_callable=AsyncMock) as mock:
+        result = await update_agent(
+            agent_id="a1",
+            adapter_config='["not", "an", "object"]',
+        )
+        assert result["isError"] is True
+        assert "JSON object" in result["message"]
+        mock.assert_not_called()
 
 
 @pytest.mark.asyncio
