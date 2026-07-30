@@ -62,6 +62,25 @@ async def test_create_issue_interaction_invalid_payload() -> None:
 
 
 @pytest.mark.asyncio
+async def test_create_issue_interaction_requires_object_payload() -> None:
+    missing = await create_issue_interaction(
+        issue_id="i1",
+        kind="suggest_tasks",
+        title="X",
+    )
+    scalar = await create_issue_interaction(
+        issue_id="i1",
+        kind="suggest_tasks",
+        title="X",
+        payload='"not an object"',
+    )
+    assert missing["isError"] is True
+    assert scalar["isError"] is True
+    assert "JSON object" in missing["message"]
+    assert "JSON object" in scalar["message"]
+
+
+@pytest.mark.asyncio
 async def test_create_issue_interaction_full() -> None:
     with patch("paperclip_mcp.server._post", new_callable=AsyncMock) as mock:
         mock.return_value = {"id": "int1"}
@@ -72,6 +91,7 @@ async def test_create_issue_interaction_full() -> None:
             summary="Need input",
             idempotency_key="idem-1",
             continuation_policy="block",
+            payload='{"questions":[{"id":"scope","prompt":"Which scope?","options":[]}]}',
         )
         call_body = mock.call_args[0][1]
         assert call_body["summary"] == "Need input"

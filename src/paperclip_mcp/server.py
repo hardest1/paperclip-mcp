@@ -524,7 +524,7 @@ async def create_issue_interaction(
         summary: Brief description of what the interaction asks.
         idempotency_key: Key to prevent duplicate interactions.
         continuation_policy: How the agent proceeds (e.g. "block").
-        payload: JSON string with kind-specific data (e.g.
+        payload: Required JSON object with kind-specific data (e.g.
                  '{"prompt":"Ready?","acceptLabel":"Yes"}').
     """
     if kind not in _INTERACTION_KINDS:
@@ -539,13 +539,17 @@ async def create_issue_interaction(
         body["idempotencyKey"] = idempotency_key
     if continuation_policy:
         body["continuationPolicy"] = continuation_policy
-    if payload:
-        import json as _json
+    if not payload:
+        return _err("payload must be a JSON object.")
+    import json as _json
 
-        try:
-            body["payload"] = _json.loads(payload)
-        except _json.JSONDecodeError:
-            return _err("payload must be valid JSON.")
+    try:
+        parsed_payload = _json.loads(payload)
+    except _json.JSONDecodeError:
+        return _err("payload must be valid JSON.")
+    if not isinstance(parsed_payload, dict):
+        return _err("payload must be a JSON object.")
+    body["payload"] = parsed_payload
     return await _post(f"/issues/{issue_id}/interactions", body)
 
 
