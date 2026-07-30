@@ -14,6 +14,7 @@ from paperclip_mcp.server import (
     get_approval,
     list_approval_comments,
     list_approval_issues,
+    request_approval_revision,
     resubmit_approval,
 )
 
@@ -50,6 +51,37 @@ async def test_create_approval_request_invalid_payload() -> None:
         payload="not json",
     )
     assert result["isError"] is True
+
+
+@pytest.mark.asyncio
+async def test_create_approval_request_requires_object_payload() -> None:
+    missing = await create_approval_request(
+        approval_type="budget_increase",
+        requested_by_agent_id="a1",
+    )
+    scalar = await create_approval_request(
+        approval_type="budget_increase",
+        requested_by_agent_id="a1",
+        payload='"not an object"',
+    )
+    assert missing["isError"] is True
+    assert scalar["isError"] is True
+    assert "JSON object" in missing["message"]
+    assert "JSON object" in scalar["message"]
+
+
+@pytest.mark.asyncio
+async def test_request_approval_revision_uses_decision_note() -> None:
+    with patch("paperclip_mcp.server._post", new_callable=AsyncMock) as mock:
+        mock.return_value = {"id": "ap1", "status": "revision_requested"}
+        await request_approval_revision(
+            approval_id="ap1",
+            comment="Reduce the budget.",
+        )
+        mock.assert_called_once_with(
+            "/approvals/ap1/request-revision",
+            {"decisionNote": "Reduce the budget."},
+        )
 
 
 @pytest.mark.asyncio

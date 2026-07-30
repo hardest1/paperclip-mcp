@@ -2084,7 +2084,7 @@ async def request_approval_revision(approval_id: str, comment: str) -> Any:
         return _err("A comment is required when requesting a revision.")
     return await _post(
         f"/approvals/{approval_id}/request-revision",
-        {"comment": comment},
+        {"decisionNote": comment},
     )
 
 
@@ -2101,7 +2101,7 @@ async def create_approval_request(
         approval_type: Approval type (e.g. "budget_increase",
                        "hire_agent").
         requested_by_agent_id: UUID of the agent requesting approval.
-        payload: JSON string with type-specific data
+        payload: Required JSON object with type-specific data
                  (e.g. '{"amount":5000}').
         company_id: Company UUID. Uses the active company if empty.
     """
@@ -2109,13 +2109,17 @@ async def create_approval_request(
         "type": approval_type,
         "requestedByAgentId": requested_by_agent_id,
     }
-    if payload:
-        import json as _json
+    if not payload:
+        return _err("payload must be a JSON object.")
+    import json as _json
 
-        try:
-            body["payload"] = _json.loads(payload)
-        except _json.JSONDecodeError:
-            return _err("payload must be valid JSON.")
+    try:
+        parsed_payload = _json.loads(payload)
+    except _json.JSONDecodeError:
+        return _err("payload must be valid JSON.")
+    if not isinstance(parsed_payload, dict):
+        return _err("payload must be a JSON object.")
+    body["payload"] = parsed_payload
     cid = _resolve_company(company_id)
     return await _post(f"/companies/{cid}/approvals", body)
 
