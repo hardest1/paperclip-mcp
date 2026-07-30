@@ -68,6 +68,19 @@ async def test_create_secret_provider_config_invalid_json() -> None:
 
 
 @pytest.mark.asyncio
+async def test_create_secret_provider_config_rejects_non_object_json() -> None:
+    with patch("paperclip_mcp.server._post", new_callable=AsyncMock) as mock:
+        result = await create_secret_provider_config(
+            provider="vault",
+            display_name="Vault",
+            config='["not", "an", "object"]',
+        )
+        assert result["isError"] is True
+        assert "JSON object" in result["message"]
+        mock.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_update_secret_provider_config() -> None:
     with patch("paperclip_mcp.server._patch", new_callable=AsyncMock) as mock:
         mock.return_value = {"id": "spc1"}
@@ -89,6 +102,18 @@ async def test_update_secret_provider_config_invalid_json() -> None:
         config="bad",
     )
     assert result["isError"] is True
+
+
+@pytest.mark.asyncio
+async def test_update_secret_provider_config_rejects_non_object_json() -> None:
+    with patch("paperclip_mcp.server._patch", new_callable=AsyncMock) as mock:
+        result = await update_secret_provider_config(
+            config_id="spc1",
+            config='"not an object"',
+        )
+        assert result["isError"] is True
+        assert "JSON object" in result["message"]
+        mock.assert_not_called()
 
 
 @pytest.mark.asyncio

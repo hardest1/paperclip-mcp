@@ -1961,9 +1961,12 @@ async def create_secret_provider_config(
     }
     if config:
         try:
-            body["config"] = _json.loads(config)
+            parsed_config = _json.loads(config)
         except _json.JSONDecodeError as exc:
             return _err(f"Invalid JSON in config: {exc}")
+        if not isinstance(parsed_config, dict):
+            return _err("config must be a JSON object.")
+        body["config"] = parsed_config
     cid = _resolve_company(company_id)
     return await _post(f"/companies/{cid}/secret-provider-configs", body)
 
@@ -1992,9 +1995,12 @@ async def update_secret_provider_config(
         body["displayName"] = display_name
     if config:
         try:
-            body["config"] = _json.loads(config)
+            parsed_config = _json.loads(config)
         except _json.JSONDecodeError as exc:
             return _err(f"Invalid JSON in config: {exc}")
+        if not isinstance(parsed_config, dict):
+            return _err("config must be a JSON object.")
+        body["config"] = parsed_config
     if is_default is not None:
         body["isDefault"] = is_default
     return await _patch(f"/secret-provider-configs/{config_id}", body)
