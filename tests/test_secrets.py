@@ -10,6 +10,13 @@ import pytest
 from paperclip_mcp.server import create_secret, list_secrets, rotate_secret
 
 
+def test_secret_mutation_tools_warn_about_value_handling() -> None:
+    for tool in (create_secret, rotate_secret):
+        description = tool.__doc__ or ""
+        assert "Do not log" in description
+        assert "metadata" in description
+
+
 @pytest.mark.asyncio
 async def test_list_secrets() -> None:
     with patch("paperclip_mcp.server._get", new_callable=AsyncMock) as mock:

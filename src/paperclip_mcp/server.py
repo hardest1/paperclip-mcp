@@ -1809,6 +1809,10 @@ async def create_secret(
 ) -> Any:
     """Create a new encrypted secret.
 
+    Treat ``value`` as sensitive input. Do not log it, paste it into issue
+    comments, or expose it to unrelated tools. The response contains metadata
+    only and never returns the stored value.
+
     Two modes are supported:
     - Basic: provide name + value (encrypted at rest)
     - External reference: provide name + provider + managed_mode +
@@ -1849,6 +1853,10 @@ async def rotate_secret(
     provider_config_id: str = "",
 ) -> Any:
     """Rotate a secret to a new value.
+
+    Treat ``value`` as sensitive input. Do not log it, paste it into issue
+    comments, or expose it to unrelated tools. The response contains metadata
+    only and never returns the stored value.
 
     Agents configured with version: "latest" will receive the new
     value on their next heartbeat.
